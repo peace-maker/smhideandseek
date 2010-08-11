@@ -6,7 +6,7 @@
 #undef REQUIRE_EXTENSIONS
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "1.2"
+#define PLUGIN_VERSION "1.2.1"
 
 #define PREFIX "\x04Hide and Seek \x01> \x03"
 
@@ -43,9 +43,9 @@ new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
 
 // Cheat cVar part
 new Handle:g_CheckVarTimer[MAXPLAYERS+1] = {INVALID_HANDLE,...};
-new String:cheat_commands[][] = {"cl_radaralpha", "cl_minmodels", "r_shadows", "overview_preferred_mode"};
-new bool:g_ConVarViolation[MAXPLAYERS+1][4]; // 4 = amount of cheat_commands. update if you add one.
-new g_ConVarMessage[MAXPLAYERS+1][4]; // 4 = amount of cheat_commands. update if you add one.
+new String:cheat_commands[][] = {"cl_radaralpha", "r_shadows", "overview_preferred_mode"};
+new bool:g_ConVarViolation[MAXPLAYERS+1][3]; // 3 = amount of cheat_commands. update if you add one.
+new g_ConVarMessage[MAXPLAYERS+1][3]; // 3 = amount of cheat_commands. update if you add one.
 new Handle:g_CheatPunishTimer[MAXPLAYERS+1] = {INVALID_HANDLE};
 
 // Terrorist Modelchange stuff
@@ -67,7 +67,8 @@ new String:protected_cvars[][] = {"mp_flashlight",
 								  "sv_nonemesis", 
 								  "sv_nomvp", 
 								  "sv_nostats", 
-								  "mp_playerid"
+								  "mp_playerid",
+								  "sv_allowminmodels"
 								 };
 new forced_values[] = {0, // mp_flashlight
 					   0, // sv_footsteps
@@ -78,9 +79,10 @@ new forced_values[] = {0, // mp_flashlight
 					   1, // sv_nonemesis
 					   1, // sv_nomvp
 					   1, // sv_nostats
-					   1 // mp_playerid
+					   1, // mp_playerid
+					   0 //sv_allowminmodels
 					  };
-new Handle:g_ProtectedConvar[10] = {INVALID_HANDLE,...}; // 10 = amount of protected_cvars. update if you add one.
+new Handle:g_ProtectedConvar[11] = {INVALID_HANDLE,...}; // 11 = amount of protected_cvars. update if you add one.
 new Handle:g_forceCamera = INVALID_HANDLE;
 
 // whistle sounds
@@ -526,13 +528,10 @@ public Action:Event_OnPlayerHurt(Handle:event, const String:name[], bool:dontBro
 			SetEntityModel(client, "models/player/t_guerilla.mdl");
 		else if(GetConVarBool(hns_cfg_opacity_enable))
 		{
-			new alpha = (255/100*remainingHeatlh);
-			if(alpha < 150)
-				alpha = 150;
+			new alpha = 150 + RoundToNearest(10.5*float(remainingHeatlh/10));			
+			
 			SetEntData(client,g_Render+3,alpha,1,true);
 			SetEntityRenderMode(client, RENDER_TRANSTEXTURE);
-			
-			//PrintToChatAll("Ouch, got %d hp and should change opacity to %d", remainingHeatlh, alpha);
 		}
 		
 		// attacker is a human?
@@ -1127,8 +1126,6 @@ public ClientConVar(QueryCookie:cookie, client, ConVarQueryResult:result, const 
 		if(!match)
 		{
 			g_ConVarViolation[client][i] = true;
-			if(StrEqual(cvarName, "cl_minmodels"))
-				KickClient(client, "Hide and Seek: %t", "Print to console", cvarName);
 			if(g_ConVarMessage[client][i] == 0)
 			{
 				PrintToChat(client, "%s%t \x04%s 0", PREFIX, "Print to console", cvarName);
