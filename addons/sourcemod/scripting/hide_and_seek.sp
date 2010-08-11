@@ -6,7 +6,7 @@
 #undef REQUIRE_EXTENSIONS
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "1.1"
+#define PLUGIN_VERSION "1.2"
 
 #define PREFIX "\x04Hide and Seek \x01> \x03"
 
@@ -26,6 +26,8 @@ new Handle:hns_cfg_hp_seeker_inc = INVALID_HANDLE;
 new Handle:hns_cfg_hp_seeker_bonus = INVALID_HANDLE;
 new Handle:hns_cfg_opacity_enable = INVALID_HANDLE;
 new Handle:hns_cfg_hidersspeed = INVALID_HANDLE;
+new Handle:hns_cfg_disable_rightknife = INVALID_HANDLE;
+new Handle:hns_cfg_disable_ducking = INVALID_HANDLE;
 
 new Handle:mainmenu;
 new Handle:kv;
@@ -41,8 +43,9 @@ new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
 
 // Cheat cVar part
 new Handle:g_CheckVarTimer[MAXPLAYERS+1] = {INVALID_HANDLE,...};
-new String:cheat_commands[][] = {"cl_radaralpha", "cl_minmodels", "r_shadows"};
-new bool:g_ConVarViolation[MAXPLAYERS+1][3]; // 3 = amount of cheat_commands. update if you add one.
+new String:cheat_commands[][] = {"cl_radaralpha", "cl_minmodels", "r_shadows", "overview_preferred_mode"};
+new bool:g_ConVarViolation[MAXPLAYERS+1][4]; // 4 = amount of cheat_commands. update if you add one.
+new g_ConVarMessage[MAXPLAYERS+1][4]; // 4 = amount of cheat_commands. update if you add one.
 new Handle:g_CheatPunishTimer[MAXPLAYERS+1] = {INVALID_HANDLE};
 
 // Terrorist Modelchange stuff
@@ -64,8 +67,7 @@ new String:protected_cvars[][] = {"mp_flashlight",
 								  "sv_nonemesis", 
 								  "sv_nomvp", 
 								  "sv_nostats", 
-								  "mp_playerid", 
-								  "mp_forcecamera"
+								  "mp_playerid"
 								 };
 new forced_values[] = {0, // mp_flashlight
 					   0, // sv_footsteps
@@ -76,10 +78,10 @@ new forced_values[] = {0, // mp_flashlight
 					   1, // sv_nonemesis
 					   1, // sv_nomvp
 					   1, // sv_nostats
-					   1, // mp_playerid
-					   0 // mp_forcecamera
+					   1 // mp_playerid
 					  };
-new Handle:g_ProtectedConvar[11] = {INVALID_HANDLE,...}; // 11 = amount of protected_cvars. update if you add one.
+new Handle:g_ProtectedConvar[10] = {INVALID_HANDLE,...}; // 10 = amount of protected_cvars. update if you add one.
+new Handle:g_forceCamera = INVALID_HANDLE;
 
 // whistle sounds
 new g_WhistleCount[MAXPLAYERS+1] = {0,...};
@@ -114,6 +116,8 @@ public OnPluginStart()
 	hns_cfg_hp_seeker_bonus = 	CreateConVar("sm_hns_hp_seeker_bonus", "50", "How many hp should a CT gain when killing a hider?", FCVAR_PLUGIN, true, 0.00);
 	hns_cfg_opacity_enable = 	CreateConVar("sm_hns_opacity_enable", "0", "Should T get more invisible on low hp, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_hidersspeed  = 		CreateConVar("sm_hns_hidersspeed", "1.00", "Hiders speed (Default: 1.00).", FCVAR_PLUGIN, true, 0.00, true, 3.00);
+	hns_cfg_disable_rightknife =CreateConVar("sm_hns_disable_rightknife", "1", "Disable rightclick for CTs with knife? Prevents knifing without losing heatlh. (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "0", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	HookConVarChange(hns_cfg_hidersspeed, OnChangeHiderSpeed);
 	
@@ -135,6 +139,8 @@ public OnPluginStart()
 	RegConsoleCmd("third", Third_Person);
 	RegConsoleCmd("jointeam", Command_JoinTeam);
 	RegConsoleCmd("whistle", Play_Whistle);
+	if(GetConVarBool(hns_cfg_anticheat))
+		RegConsoleCmd("overview_mode", Block_Cmd);
 	
 	RegAdminCmd("sm_hns_force_whistle", ForceWhistle, ADMFLAG_CHAT, "Force a player to whistle");
 		
@@ -145,9 +151,12 @@ public OnPluginStart()
 	// set the default values for cvar checking
 	for(new x=0;x<MaxClients;x++)
 		for(new y=0;y<sizeof(cheat_commands);y++)
+		{
 			g_ConVarViolation[x][y] = false;
+			g_ConVarMessage[x][y] = 0;
+		}
 	
-	// disable flashlights
+	// set bad server cvars
 	for(new i=0;i<sizeof(protected_cvars);i++)
 	{
 		g_ProtectedConvar[i] = FindConVar(protected_cvars[i]);
@@ -155,14 +164,19 @@ public OnPluginStart()
 		HookConVarChange(g_ProtectedConvar[i], OnCvarChange);
 	}
 	
+	// hook forcecamera
+	g_forceCamera = FindConVar("mp_forcecamera");
+	
 	// start advertising spam
 	CreateTimer(120.0, SpamCommands, _, TIMER_REPEAT);
 	
 	// get the offsets
+	// for weapon stripping without sdkhooks
 	g_WeaponParent = 	FindSendPropOffs("CBaseCombatWeapon", "m_hOwnerEntity");
 	if(g_WeaponParent == -1)
 		SetFailState("Couldnt find the m_hOwnerEntity offset!");
 	
+	// for transparency
 	g_Render = 			FindSendPropOffs("CAI_BaseNPC", "m_clrRender");
 	if(g_Render == -1)
 		SetFailState("Couldnt find the m_clrRender offset!");
@@ -224,7 +238,6 @@ public OnMapStart()
 			new Float:orign[3] = {-1000.0,...};
 			DispatchKeyValue(ent, "targetname", "hidenseek_roundend");
 			DispatchKeyValueVector(ent, "orign", orign);
-			SetEntityModel(ent, "models/weapons/v_knife_t.mdl"); // just a random model :B
 			DispatchSpawn(ent);
 		}
 	}
@@ -251,7 +264,10 @@ public OnClientDisconnect(client)
 	if(!IsFakeClient(client))
 	{
 		for(new i=0;i<sizeof(cheat_commands);i++)
+		{
 			g_ConVarViolation[client][i] = false;
+			g_ConVarMessage[client][i] = 0;
+		}
 	
 		g_InThirdPersonView[client] = false;
 		g_ModelChangeCount[client] = 0;
@@ -286,14 +302,24 @@ public OnClientDisconnect(client)
 // prevent players from ducking
 public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon)
 {
+	decl String:weaponName[30];
 	// don't allow ct's to shoot in the beginning of the round
-	if(GetClientTeam(client) == 3 && g_IsCTWaiting[client] && (buttons & IN_ATTACK || buttons & IN_ATTACK2))
+	new team = GetClientTeam(client);
+	GetClientWeapon(client, weaponName, sizeof(weaponName));
+	if(team == 3 && g_IsCTWaiting[client] && (buttons & IN_ATTACK || buttons & IN_ATTACK2))
 	{
 		buttons &= ~IN_ATTACK;
 		buttons &= ~IN_ATTACK2;
+	} // disable rightclick for cts
+	else if(team == 3 && GetConVarBool(hns_cfg_disable_rightknife) && buttons & IN_ATTACK2 && !strcmp(weaponName, "weapon_knife"))
+	{
+		buttons &= ~IN_ATTACK2;
 	}
-	if(buttons & IN_DUCK)
+	
+	// disable ducking for everyone
+	if(buttons & IN_DUCK && GetConVarBool(hns_cfg_disable_ducking))
 		buttons &= ~IN_DUCK;
+	
 	return Plugin_Continue;
 }
 
@@ -323,6 +349,10 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		return Plugin_Continue;
 	else if(team == 2) // Team T
 	{
+		// set the mp_forcecamera value correctly, so he can use thirdperson again
+		if(!IsFakeClient(client) && GetConVarInt(g_forceCamera) == 1)
+			SendConVarValue(client, g_forceCamera, "0");
+		
 		// reset model change count
 		g_ModelChangeCount[client] = 0;
 		g_InThirdPersonView[client] = false;
@@ -364,6 +394,9 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 	}
 	else if(team == 3) // Team CT
 	{
+		if(!IsFakeClient(client) && GetConVarInt(g_forceCamera) == 1)
+			SendConVarValue(client, g_forceCamera, "1");
+		
 		new currentTime = GetTime();
 		new Float:freezeTime = GetConVarFloat(hns_cfg_freezetime);
 		// don't keep late spawning cts blinded longer than the others :)
@@ -427,7 +460,7 @@ public Action:Event_OnWeaponFire(Handle:event, const String:name[], bool:dontBro
 
 public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	// remove bombzones and hostage rescue zones so no normal gameplay could end the round
+	// remove bombzones and hostages so no normal gameplay could end the round
 	new maxent = GetMaxEntities(), String:eName[64];
 	for (new i=MaxClients;i<maxent;i++)
 	{
@@ -510,6 +543,7 @@ public Action:Event_OnPlayerHurt(Handle:event, const String:name[], bool:dontBro
 			SetEntityHealth(attacker, GetClientHealth(attacker)+GetConVarInt(hns_cfg_hp_seeker_inc)+decrease);
 			
 			// the hider died? give extra health! need to add the decreased value again, since he fired his gun and lost hp.
+			// possible "bug": seeker could be slayed because weapon_fire is called earlier than player_hurt.
 			if(remainingHeatlh <= 0)
 				SetEntityHealth(attacker, GetClientHealth(attacker)+GetConVarInt(hns_cfg_hp_seeker_bonus)+decrease);
 		}
@@ -521,6 +555,17 @@ public Action:Event_OnPlayerHurt(Handle:event, const String:name[], bool:dontBro
 public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 {
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
+	
+	// set the mp_forcecamera value correctly, so he can watch his teammates
+	// This doesn't work. Even if the convar is set to 0, the hiders are only able to spectate their teammates..
+	if(GetConVarInt(g_forceCamera) == 1)
+	{
+		if(!IsFakeClient(client) && GetClientTeam(client) != 2)
+			SendConVarValue(client, g_forceCamera, "1");
+		else if(!IsFakeClient(client))
+			SendConVarValue(client, g_forceCamera, "0");
+	}
+	
 	if (!IsValidEntity(client) || IsPlayerAlive(client))
 		return;
 	
@@ -585,7 +630,8 @@ public Action:DisableModelMenu(Handle:timer, any:client)
 	
 	g_AllowModelChange[client] = false;
 	
-	PrintToChat(client, "%s%t", PREFIX, "Modelmenu Disabled");
+	if(IsPlayerAlive(client))
+		PrintToChat(client, "%s%t", PREFIX, "Modelmenu Disabled");
 	
 	// didn't he chose a model?
 	if(GetClientTeam(client) == 2 && g_ModelChangeCount[client] == 0)
@@ -638,7 +684,8 @@ public Action:StartVarChecker(Handle:timer, any:client)
 	}
 	else if(!g_IsCTWaiting[client])
 	{
-		SetEntityMoveType(client, MOVETYPE_WALK);
+		if(IsPlayerAlive(client))
+			SetEntityMoveType(client, MOVETYPE_WALK);
 		PerformBlind(client, 0);
 	}
 	
@@ -728,13 +775,13 @@ public Action:Menu_SelectModel(client,args)
 public Action:Third_Person(client, args)
 {
 	if (!IsClientInGame(client) || !IsPlayerAlive(client))
-		return Plugin_Continue;
+		return Plugin_Handled;
 	
 	// Only allow Terrorists to use thirdperson view
 	if(GetClientTeam(client) != 2)
 	{
 		PrintToChat(client, "%s%t", PREFIX, "Only terrorists can use");
-		return Plugin_Continue;
+		return Plugin_Handled;
 	}
 	
 	if(!g_InThirdPersonView[client])
@@ -755,7 +802,7 @@ public Action:Third_Person(client, args)
 		g_InThirdPersonView[client] = false;
 	}
 	
-	return Plugin_Continue;
+	return Plugin_Handled;
 }
 
 // jointeam command
@@ -824,9 +871,17 @@ public Action:Command_JoinTeam(client, args)
 			}
 		}
 	}
-	
+	else if(strcmp(text, "2", false) == 0)
+	{
+		if(!IsFakeClient(client) && GetConVarInt(g_forceCamera) == 1)
+			SendConVarValue(client, g_forceCamera, "0");
+		return Plugin_Continue;
+	}
 	// allow all other teamchanges...
-
+	
+	if(!IsFakeClient(client) && GetConVarInt(g_forceCamera) == 1)
+		SendConVarValue(client, g_forceCamera, "1");
+	
 	return Plugin_Continue;
 }
 
@@ -859,6 +914,11 @@ public Action:Play_Whistle(client,args)
 		PrintToChat(client, "%s%t", PREFIX, "whistle limit exceeded", cvarWhistleTimes);
 	}
 	
+	return Plugin_Handled;
+}
+
+public Action:Block_Cmd(client,args)
+{
 	return Plugin_Handled;
 }
 
@@ -1059,12 +1119,6 @@ public ClientConVar(QueryCookie:cookie, client, ConVarQueryResult:result, const 
 {
 	new bool:match = StrEqual(cvarValue, "0");
 	
-	if(!match)
-	{
-		PrintToChat(client, "%s%t \x04%s 0", PREFIX, "Print to console", cvarName);
-		PrintHintText(client, "%t %s 0", "Print to console", cvarName);
-	}
-	
 	for(new i=0;i<sizeof(cheat_commands);i++)
 	{
 		if(!StrEqual(cheat_commands[i], cvarName))
@@ -1075,6 +1129,14 @@ public ClientConVar(QueryCookie:cookie, client, ConVarQueryResult:result, const 
 			g_ConVarViolation[client][i] = true;
 			if(StrEqual(cvarName, "cl_minmodels"))
 				KickClient(client, "Hide and Seek: %t", "Print to console", cvarName);
+			if(g_ConVarMessage[client][i] == 0)
+			{
+				PrintToChat(client, "%s%t \x04%s 0", PREFIX, "Print to console", cvarName);
+				PrintHintText(client, "%t %s 0", "Print to console", cvarName);
+			}
+			g_ConVarMessage[client][i]++;
+			if(g_ConVarMessage[client][i] > 5)
+				g_ConVarMessage[client][i] = 0;
 		}
 		else
 			g_ConVarViolation[client][i] = false;
