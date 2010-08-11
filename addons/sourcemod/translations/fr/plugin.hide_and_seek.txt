@@ -1,0 +1,113 @@
+"Phrases"
+{
+	
+	"Title Select Model"
+	{
+		"fr"			"Choisissez un Model"
+	}
+	
+	"Model Changed"
+	{
+		"fr"			"Vous êtes maintenant déguisé en"
+	}
+
+	"Modelmenu Disabled"
+	{
+		"fr"			"Vous ne pouvez plus changer de Model ce round-ci"
+	}
+
+	"Did not choose model"
+	{
+		"fr"			"Vous n'avez pas choisi de Model, assignation en cours..."
+	}
+	
+	"Print to console"
+	{
+		"fr"			"Veuillez taper cela dans la console:"
+	}
+	
+	"Only terrorists can select models"
+	{
+		"fr"			"Seuls les terroristes peuvent choisir un Model."
+	}
+	
+	"Only terrorists can use"
+	{
+		"fr"			"Seuls les terroristes peuvent utiliser cette commande."
+	}
+	
+	"CT team is full"
+	{
+		"fr"			"L'équipe anti-terroriste est complète!"
+	}
+
+	"Type again for ego"
+	{
+		"fr"			"Retapez cette commande pour retourner en première personne."
+	}
+
+	"Wait for t to hide"
+	{
+		"fr"			"Les terroristes ont {1} secondes pour se cacher."
+	}
+
+	"seconds to hide"
+	{
+		"fr"			"Vous avez {1} secondes pour vous cacher. Trouvez un endroit où vous vous fonderez dans le décor!"
+	}
+
+	"Go search"
+	{
+		"fr"			"Vous pensez que les terroristes ne sont pas bien cachés? Trouvez-les!"
+	}
+
+	"whistled"
+	{
+		"fr"			"siffle!"
+	}
+    
+	"whistles left"
+	{
+		"fr"			"Vous pouvez siffler encore {1} fois."
+	}
+
+	"T type /whistle"
+	{
+		"fr"			"Les terroristes peuvent siffler pour donner un indice. Tapez \"/whistle\" dans le chat!"
+	}
+	
+	"whistle limit exceeded"
+	{
+		"fr"			"Vous avez déjà utilisé {1} whistles pendant ce round."
+	}
+
+	"T type /tp"
+	{
+		"fr"			"Tapez \"/tp\" dans le chat pour enclencher la vue 3ème personne."
+	}
+
+	"Type !hide"
+	{
+		"fr"			"Tapez \"!hide\" dans le chat pour ouvrir le menu de séléction des Models."
+	}
+
+	"Spectator Cheater"
+	{
+		"fr"			"a été mis en spectateur à cause de mauvaises Cvars."
+	}
+
+	"Kick bad cvars"
+	{
+		"fr"			"Vous devez changer les Cvars au dessus (console) pour jouer sur ce serveur."
+	}
+
+	"protected cvar"
+	{
+		"fr"			"Cette Cvar est protégé."
+	}
+
+	"got frags"
+	{
+		"fr"			"Tous les terroristes vivants gagnent {1} points. Bien joué!"
+	}
+}

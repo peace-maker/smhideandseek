@@ -1,0 +1,113 @@
+"Phrases"
+{
+	
+	"Title Select Model"
+	{
+		"en"			"Wähle ein Model"
+	}
+	
+	"Model Changed"
+	{
+		"en"			"Du bist jetzt ein(e)"
+	}
+
+	"Modelmenu Disabled"
+	{
+		"en"			"Du kannst dein Model in dieser Runde nicht nochmal ändern."
+	}
+
+	"Did not choose model"
+	{
+		"en"			"Du hast kein Model ausgewählt. Autmatische Zuweisung..."
+	}
+	
+	"Print to console"
+	{
+		"en"			"Bitte kopiere das in deine Konsole:"
+	}
+	
+	"Only terrorists can select models"
+	{
+		"en"			"Nur Terroristen können Models auswählen."
+	}
+	
+	"Only terrorists can use"
+	{
+		"en"			"Nur Terroristen können diesen Befehl benutzen."
+	}
+	
+	"CT team is full"
+	{
+		"en"			"Das CT Team ist voll!"
+	}
+
+	"Type again for ego"
+	{
+		"en"			"Schreibe es nochmal, um wieder zur Egoperspektive zu wechseln."
+	}
+
+	"Wait for t to hide"
+	{
+		"en"			"Gib den Terroristen {1} Sekunden zum verstecken."
+	}
+
+	"seconds to hide"
+	{
+		"en"			"Du hast {1} Sekunden, um dich zu verstecken. Suche einen Platz, der zu deinem Model passt!"
+	}
+
+	"Go search"
+	{
+		"en"			"Du denkst nicht, dass alle Terroristen gut versteckt sind? Dann finde sie mal!"
+	}
+
+	"whistled"
+	{
+		"en"			"pfiff!"
+	}
+    
+	"whistles left"
+	{
+		"en"			"Du darfst noch {1}x pfeifen."
+	}
+
+	"T type /whistle"
+	{
+		"en"			"Terroristen können pfeifen, um den Suchern einen Tipp zu geben. Schreibe \"/whistle\" im Chat!"
+	}
+	
+	"whistle limit exceeded"
+	{
+		"en"			"Du hast bereits deine {1} Pfiffe dieser Runde benutzt."
+	}
+
+	"T type /tp"
+	{
+		"en"			"Schreibe \"/tp\" im Chat, um die Thirdperson-Perspektive zu wechseln!"
+	}
+
+	"Type !hide"
+	{
+		"en"			"Schreibe \"!hide\" im Chat, um das Modelmenü zu öffnen."
+	}
+
+	"Spectator Cheater"
+	{
+		"en"			"wurde dem Zuschauermodus zugeteilt, da er falsche cVar Werte eingestellt hat."
+	}
+
+	"Kick bad cvars"
+	{
+		"en"			"Du musst die obrigen cVars ändern (Konsole), um Hide and Seek spielen zu können."
+	}
+
+	"protected cvar"
+	{
+		"en"			"Dieser cVar ist geschützt. Lass es wie es ist!"
+	}
+
+	"got frags"
+	{
+		"en"			"Alle überlebenden Verstecker haben {1} Punkte bekommen. Gut gemacht!"
+	}
+}

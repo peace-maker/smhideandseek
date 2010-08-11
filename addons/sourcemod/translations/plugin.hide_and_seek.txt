@@ -1,0 +1,118 @@
+"Phrases"
+{
+	
+	"Title Select Model"
+	{
+		"en"			"Select Model"
+	}
+	
+	"Model Changed"
+	{
+		"en"			"You're now a"
+	}
+
+	"Modelmenu Disabled"
+	{
+		"en"			"You can't change your model anymore in this round."
+	}
+
+	"Did not choose model"
+	{
+		"en"			"You didn't choose a model. Autoassigning..."
+	}
+	
+	"Print to console"
+	{
+		"en"			"Please print this to console:"
+	}
+	
+	"Only terrorists can select models"
+	{
+		"en"			"Only terrorists can select models."
+	}
+	
+	"Only terrorists can use"
+	{
+		"en"			"Only terrorists can use this command."
+	}
+	
+	"CT team is full"
+	{
+		"en"			"CT team is full!"
+	}
+
+	"Type again for ego"
+	{
+		"en"			"Type again to switch back to ego perspective."
+	}
+
+	"Wait for t to hide"
+	{
+		"#format"		"{1:d}"
+		"en"			"Give the terrorists {1} seconds to hide."
+	}
+
+	"seconds to hide"
+	{
+		"#format"		"{1:d}"
+		"en"			"You have {1} seconds to hide. Find a place where you fit into the background!"
+	}
+
+	"Go search"
+	{
+		"en"			"You don't think all terrorists are hidden well? Go find them!"
+	}
+
+	"whistled"
+	{
+		"en"			"whistled!"
+	}
+    
+	"whistles left"
+	{
+		"#format"		"{1:d}"
+		"en"			"You are allowed to whistle {1} more times."
+	}
+
+	"T type /whistle"
+	{
+		"en"			"Terrorists may whistle to give a hint. Type \"/whistle\" in chat!"
+	}
+	
+	"whistle limit exceeded"
+	{
+		"#format"		"{1:d}"
+		"en"			"You already used your {1} whistles this round."
+	}
+
+	"T type /tp"
+	{
+		"en"			"Type \"/tp\" in chat to toggle thirdperson view!"
+	}
+
+	"Type !hide"
+	{
+		"en"			"Type \"!hide\" in chat to open the options menu."
+	}
+
+	"Spectator Cheater"
+	{
+		"en"			"has been moved to spectator because of bad cvars."
+	}
+
+	"Kick bad cvars"
+	{
+		"en"			"You have to change the above cvars (console) to play on this server."
+	}
+
+	"protected cvar"
+	{
+		"en"			"This cvar is protected. Leave it alone!"
+	}
+
+	"got frags"
+	{
+		"#format"		"{1:d}"
+		"en"			"All surviving hiders got {1} points. Good job!"
+	}
+}
