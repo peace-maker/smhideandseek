@@ -6,7 +6,7 @@
 #undef REQUIRE_EXTENSIONS
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "1.2.1"
+#define PLUGIN_VERSION "1.2.2"
 
 #define PREFIX "\x04Hide and Seek \x01> \x03"
 
@@ -15,6 +15,7 @@ new Handle:hns_cfg_freezects = INVALID_HANDLE;
 new Handle:hns_cfg_freezetime = INVALID_HANDLE;
 new Handle:hns_cfg_changelimit = INVALID_HANDLE;
 new Handle:hns_cfg_changelimittime = INVALID_HANDLE;
+new Handle:hns_cfg_autochoose = INVALID_HANDLE;
 new Handle:hns_cfg_whistle = INVALID_HANDLE;
 new Handle:hns_cfg_whistle_times = INVALID_HANDLE;
 new Handle:hns_cfg_anticheat = INVALID_HANDLE;
@@ -43,8 +44,8 @@ new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
 
 // Cheat cVar part
 new Handle:g_CheckVarTimer[MAXPLAYERS+1] = {INVALID_HANDLE,...};
-new String:cheat_commands[][] = {"cl_radaralpha", "r_shadows", "overview_preferred_mode"};
-new bool:g_ConVarViolation[MAXPLAYERS+1][3]; // 3 = amount of cheat_commands. update if you add one.
+new String:cheat_commands[][] = {"cl_radaralpha", "overview_preferred_mode"};
+new bool:g_ConVarViolation[MAXPLAYERS+1][2]; // 2 = amount of cheat_commands. update if you add one.
 new g_ConVarMessage[MAXPLAYERS+1][3]; // 3 = amount of cheat_commands. update if you add one.
 new Handle:g_CheatPunishTimer[MAXPLAYERS+1] = {INVALID_HANDLE};
 
@@ -107,6 +108,7 @@ public OnPluginStart()
 	hns_cfg_freezetime = 		CreateConVar("sm_hns_freezetime", "25.0", "How long should the CTs are freezed after spawn?", FCVAR_PLUGIN, true, 1.00, true, 120.00);
 	hns_cfg_changelimit = 		CreateConVar("sm_hns_changelimit", "2", "How often a T is allowed to choose his model ingame.", FCVAR_PLUGIN, true, 0.00);
 	hns_cfg_changelimittime = 	CreateConVar("sm_hns_changelimittime", "30.0", "How long should a T be allowed to change his model again after spawn?", FCVAR_PLUGIN, true, 0.00);
+	hns_cfg_autochoose = 		CreateConVar("sm_hns_autochoose", "0", "Should the plugin choose models for the hiders automatically?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_whistle = 			CreateConVar("sm_hns_whistle", "1", "Are terrorists allowed to whistle?", FCVAR_PLUGIN);
 	hns_cfg_whistle_times = 	CreateConVar("sm_hns_whistle_times", "5", "How many times a hider is allowed to whistle per round?", FCVAR_PLUGIN);
 	hns_cfg_anticheat = 		CreateConVar("sm_hns_anticheat", "1", "Check player cheat convars, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
@@ -170,7 +172,7 @@ public OnPluginStart()
 	g_forceCamera = FindConVar("mp_forcecamera");
 	
 	// start advertising spam
-	CreateTimer(120.0, SpamCommands, _, TIMER_REPEAT);
+	CreateTimer(120.0, SpamCommands, 0);
 	
 	// get the offsets
 	// for weapon stripping without sdkhooks
@@ -312,7 +314,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 	{
 		buttons &= ~IN_ATTACK;
 		buttons &= ~IN_ATTACK2;
-	} // disable rightclick for cts
+	} // disable rightclick knifing for cts
 	else if(team == 3 && GetConVarBool(hns_cfg_disable_rightknife) && buttons & IN_ATTACK2 && !strcmp(weaponName, "weapon_knife"))
 	{
 		buttons &= ~IN_ATTACK2;
@@ -379,7 +381,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			SetEntityRenderMode(client, RENDER_TRANSTEXTURE);
 		}
 		
-		// Assign a model to bots immediately
+		// Assign a model to bots immediately and disable all menus or timers.
 		if(IsFakeClient(client))
 			g_AllowModelChangeTimer[client] = CreateTimer(0.1, DisableModelMenu, client);
 		else
@@ -387,7 +389,10 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		
 		g_WhistleCount[client] = 0;
 		
-		DisplayMenu(mainmenu, client, RoundToFloor(GetConVarFloat(hns_cfg_changelimittime)));
+		if(GetConVarBool(hns_cfg_autochoose))
+			SetRandomModel(client);
+		else
+			DisplayMenu(mainmenu, client, RoundToFloor(GetConVarFloat(hns_cfg_changelimittime)));
 		
 		if(GetConVarBool(hns_cfg_freezects))
 			PrintToChat(client, "%s%t", PREFIX, "seconds to hide", RoundToFloor(GetConVarFloat(hns_cfg_freezetime)));
@@ -429,7 +434,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			}
 			
 			// Stop freezing player
-			g_UnfreezeCTTimer[client] = CreateTimer(freezeTime-float(currentTime - g_FirstCTSpawn), UnFreezePlayer, client);
+			g_UnfreezeCTTimer[client] = CreateTimer(freezeTime-float(currentTime - g_FirstCTSpawn), UnFreezePlayer, client, TIMER_FLAG_NO_MAPCHANGE);
 			
 			PrintToChat(client, "%s%t", PREFIX, "Wait for t to hide", RoundToFloor(freezeTime-float(currentTime - g_FirstCTSpawn)));
 			g_IsCTWaiting[client] = true;
@@ -624,6 +629,9 @@ public Action:UnFreezePlayer(Handle:timer, any:client)
 
 public Action:DisableModelMenu(Handle:timer, any:client)
 {
+	
+	g_AllowModelChangeTimer[client] = INVALID_HANDLE;
+	
 	if(!IsClientInGame(client))
 		return Plugin_Handled;
 	
@@ -636,20 +644,8 @@ public Action:DisableModelMenu(Handle:timer, any:client)
 	if(GetClientTeam(client) == 2 && g_ModelChangeCount[client] == 0)
 	{
 		// give him a random one.
-		decl String:ModelPath[80], String:finalPath[100], String:ModelName[60], String:RandomNumber[4];
-		IntToString(GetRandomInt(1,g_TotalModelsAvailable), RandomNumber, sizeof(RandomNumber));
-		KvJumpToKey(kv, RandomNumber);
-		KvGetString(kv, "name", ModelName, sizeof(ModelName));
-		KvGetString(kv, "path", ModelPath, sizeof(ModelPath));
-		FormatEx(finalPath, sizeof(finalPath), "models/%s.mdl", ModelPath);
-		KvRewind(kv);
-		SetEntityModel(client, finalPath);
-		PrintToChat(client, "%s%t", PREFIX, "Did not choose model");
-		PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", ModelName);
-		g_ModelChangeCount[client]++;
+		SetRandomModel(client);
 	}
-	
-	g_AllowModelChangeTimer[client] = INVALID_HANDLE;
 	
 	return Plugin_Handled;
 }
@@ -678,7 +674,7 @@ public Action:StartVarChecker(Handle:timer, any:client)
 		
 		if(GetConVarInt(hns_cfg_cheat_punishment) != 0 && g_CheatPunishTimer[client] == INVALID_HANDLE)
 		{
-			g_CheatPunishTimer[client] = CreateTimer(15.0, PerformCheatPunishment, client);
+			g_CheatPunishTimer[client] = CreateTimer(15.0, PerformCheatPunishment, client, TIMER_FLAG_NO_MAPCHANGE);
 		}
 	}
 	else if(!g_IsCTWaiting[client])
@@ -693,6 +689,8 @@ public Action:StartVarChecker(Handle:timer, any:client)
 
 public Action:PerformCheatPunishment(Handle:timer, any:client)
 {
+	g_CheatPunishTimer[client] = INVALID_HANDLE;
+	
 	if(!IsClientInGame(client) || !IsConVarCheater(client))
 		return Plugin_Handled;
 	
@@ -709,21 +707,22 @@ public Action:PerformCheatPunishment(Handle:timer, any:client)
 				PrintToConsole(client, "Hide and Seek: %t %s 0", "Print to console", cheat_commands[i]);
 		KickClient(client, "Hide and Seek: %t", "Kick bad cvars");
 	}
-	
-	g_CheatPunishTimer[client] = INVALID_HANDLE;
-	
 	return Plugin_Handled;
 }
 
 // teach the players the /whistle and /tp commands
-public Action:SpamCommands(Handle:timer)
+public Action:SpamCommands(Handle:timer, any:data)
 {
-	if(GetConVarBool(hns_cfg_whistle))
+	if(GetConVarBool(hns_cfg_whistle) && data == 1)
 		PrintToChatAll("%s%t", PREFIX, "T type /whistle");
-	
-	for(new i=1;i<=MaxClients;i++)
-		if(IsClientInGame(i) && GetClientTeam(i) == 2)
-			PrintToChat(i, "%s%t", PREFIX, "T type /tp");
+	else if(!GetConVarBool(hns_cfg_whistle) || data == 0)
+	{
+		for(new i=1;i<=MaxClients;i++)
+			if(IsClientInGame(i) && GetClientTeam(i) == 2)
+				PrintToChat(i, "%s%t", PREFIX, "T type /tp");
+	}
+	CreateTimer(120.0, SpamCommands, (data==0?1:0));
+	return Plugin_Handled;
 }
 
 // show all players a countdown
@@ -749,7 +748,7 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 * 
 */
 
-// say /hide 
+// say /hide /hidemenu
 public Action:Menu_SelectModel(client,args)
 {
 	if (mainmenu == INVALID_HANDLE)
@@ -761,7 +760,14 @@ public Action:Menu_SelectModel(client,args)
 	{
 		new changeLimit = GetConVarInt(hns_cfg_changelimit);
 		if(g_AllowModelChange[client] && (changeLimit == 0 || g_ModelChangeCount[client] < (changeLimit+1)))
-			DisplayMenu(mainmenu, client, RoundToFloor(GetConVarFloat(hns_cfg_changelimittime)));
+		{
+			if(GetConVarBool(hns_cfg_autochoose))
+				SetRandomModel(client);
+			else
+				DisplayMenu(mainmenu, client, RoundToFloor(GetConVarFloat(hns_cfg_changelimittime)));
+		}
+		else
+			PrintToChat(client, "%s%t", PREFIX, "Modelmenu Disabled");
 	}
 	else
 	{
@@ -1082,6 +1088,22 @@ public Action:StripWeapons(Handle:timer, any:client)
 	}
 }
 
+SetRandomModel(client)
+{
+	// give him a random one.
+	decl String:ModelPath[80], String:finalPath[100], String:ModelName[60], String:RandomNumber[4];
+	IntToString(GetRandomInt(1, g_TotalModelsAvailable), RandomNumber, sizeof(RandomNumber));
+	KvJumpToKey(kv, RandomNumber);
+	KvGetString(kv, "name", ModelName, sizeof(ModelName));
+	KvGetString(kv, "path", ModelPath, sizeof(ModelPath));
+	FormatEx(finalPath, sizeof(finalPath), "models/%s.mdl", ModelPath);
+	KvRewind(kv);
+	SetEntityModel(client, finalPath);
+	PrintToChat(client, "%s%t", PREFIX, "Did not choose model");
+	PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", ModelName);
+	g_ModelChangeCount[client]++;
+}
+
 /*
 * 
 * Handle ConVars
@@ -1116,6 +1138,9 @@ public OnChangeHiderSpeed(Handle:convar, const String:oldValue[], const String:n
 // check the given cheat cvars on every client
 public ClientConVar(QueryCookie:cookie, client, ConVarQueryResult:result, const String:cvarName[], const String:cvarValue[])
 {
+	if(!IsClientInGame(client))
+		return;
+	
 	new bool:match = StrEqual(cvarValue, "0");
 	
 	for(new i=0;i<sizeof(cheat_commands);i++)
