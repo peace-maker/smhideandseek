@@ -6,7 +6,7 @@
 #undef REQUIRE_EXTENSIONS
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "1.2.2"
+#define PLUGIN_VERSION "1.2.3"
 
 #define PREFIX "\x04Hide and Seek \x01> \x03"
 
@@ -46,7 +46,7 @@ new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
 new Handle:g_CheckVarTimer[MAXPLAYERS+1] = {INVALID_HANDLE,...};
 new String:cheat_commands[][] = {"cl_radaralpha", "overview_preferred_mode"};
 new bool:g_ConVarViolation[MAXPLAYERS+1][2]; // 2 = amount of cheat_commands. update if you add one.
-new g_ConVarMessage[MAXPLAYERS+1][3]; // 3 = amount of cheat_commands. update if you add one.
+new g_ConVarMessage[MAXPLAYERS+1][2]; // 2 = amount of cheat_commands. update if you add one.
 new Handle:g_CheatPunishTimer[MAXPLAYERS+1] = {INVALID_HANDLE};
 
 // Terrorist Modelchange stuff
@@ -106,7 +106,7 @@ public OnPluginStart()
 	// Config cvars
 	hns_cfg_freezects = 		CreateConVar("sm_hns_freezects", "1", "Should CTs get freezed and blinded on spawn?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_freezetime = 		CreateConVar("sm_hns_freezetime", "25.0", "How long should the CTs are freezed after spawn?", FCVAR_PLUGIN, true, 1.00, true, 120.00);
-	hns_cfg_changelimit = 		CreateConVar("sm_hns_changelimit", "2", "How often a T is allowed to choose his model ingame.", FCVAR_PLUGIN, true, 0.00);
+	hns_cfg_changelimit = 		CreateConVar("sm_hns_changelimit", "2", "How often a T is allowed to choose his model ingame? 0 = unlimited", FCVAR_PLUGIN, true, 0.00);
 	hns_cfg_changelimittime = 	CreateConVar("sm_hns_changelimittime", "30.0", "How long should a T be allowed to change his model again after spawn?", FCVAR_PLUGIN, true, 0.00);
 	hns_cfg_autochoose = 		CreateConVar("sm_hns_autochoose", "0", "Should the plugin choose models for the hiders automatically?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_whistle = 			CreateConVar("sm_hns_whistle", "1", "Are terrorists allowed to whistle?", FCVAR_PLUGIN);
@@ -143,6 +143,7 @@ public OnPluginStart()
 	RegConsoleCmd("third", Third_Person);
 	RegConsoleCmd("jointeam", Command_JoinTeam);
 	RegConsoleCmd("whistle", Play_Whistle);
+	RegConsoleCmd("whoami", Display_ModelName);
 	if(GetConVarBool(hns_cfg_anticheat))
 		RegConsoleCmd("overview_mode", Block_Cmd);
 	
@@ -918,6 +919,44 @@ public Action:Play_Whistle(client,args)
 	{
 		PrintToChat(client, "%s%t", PREFIX, "whistle limit exceeded", cvarWhistleTimes);
 	}
+	
+	return Plugin_Handled;
+}
+
+public Action:Display_ModelName(client,args)
+{
+	// only enable command, if player already chose a model
+	if(!IsPlayerAlive(client) || g_ModelChangeCount[client] == 0)
+		return Plugin_Handled;
+	
+	// only Ts can use a model
+	if(GetClientTeam(client) != 2)
+	{
+		PrintToChat(client, "%s%t", PREFIX, "Only terrorists can use");
+		return Plugin_Handled;
+	}
+	
+	decl String:modelName[128];
+	GetClientModel(client, modelName, sizeof(modelName));
+	
+	if (!KvGotoFirstSubKey(kv))
+	{
+		return Plugin_Handled;
+	}
+	
+	decl String:name[30], String:path[100], String:fullPath[100];
+	do
+	{
+		KvGetString(kv, "name", name, sizeof(name));
+		KvGetString(kv, "path", path, sizeof(path));
+		FormatEx(fullPath, sizeof(fullPath), "models/%s.mdl", path);
+		if(StrEqual(fullPath, modelName))
+		{
+			KvGetString(kv, "name", name, sizeof(name));
+			PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", name);
+		}
+	} while (KvGotoNextKey(kv));
+	KvRewind(kv);
 	
 	return Plugin_Handled;
 }
