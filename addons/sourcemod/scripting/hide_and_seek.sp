@@ -29,6 +29,7 @@ new Handle:hns_cfg_opacity_enable = INVALID_HANDLE;
 new Handle:hns_cfg_hidersspeed = INVALID_HANDLE;
 new Handle:hns_cfg_disable_rightknife = INVALID_HANDLE;
 new Handle:hns_cfg_disable_ducking = INVALID_HANDLE;
+new Handle:hns_cfg_auto_thirdperson = INVALID_HANDLE;
 
 new Handle:mainmenu;
 new Handle:kv;
@@ -122,6 +123,7 @@ public OnPluginStart()
 	hns_cfg_hidersspeed  = 		CreateConVar("sm_hns_hidersspeed", "1.00", "Hiders speed (Default: 1.00).", FCVAR_PLUGIN, true, 0.00, true, 3.00);
 	hns_cfg_disable_rightknife =CreateConVar("sm_hns_disable_rightknife", "1", "Disable rightclick for CTs with knife? Prevents knifing without losing heatlh. (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "0", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	HookConVarChange(hns_cfg_hidersspeed, OnChangeHiderSpeed);
 	
@@ -386,7 +388,12 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		if(IsFakeClient(client))
 			g_AllowModelChangeTimer[client] = CreateTimer(0.1, DisableModelMenu, client);
 		else
+		{
 			g_AllowModelChangeTimer[client] = CreateTimer(GetConVarFloat(hns_cfg_changelimittime), DisableModelMenu, client);
+			// Set them to thirdperson automatically
+			if(GetConVarBool(hns_cfg_auto_thirdperson))
+				Third_Person(client, 0);
+		}
 		
 		g_WhistleCount[client] = 0;
 		

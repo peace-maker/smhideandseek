@@ -43,7 +43,7 @@
 
 	"Type again for ego"
 	{
-		"fr"			"Retapez cette commande pour retourner en première personne."
+		"fr"			"Retapez /tp pour retourner en première personne."
 	}
 
 	"Wait for t to hide"

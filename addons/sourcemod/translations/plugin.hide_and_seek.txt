@@ -43,7 +43,7 @@
 
 	"Type again for ego"
 	{
-		"en"			"Type again to switch back to ego perspective."
+		"en"			"Type /tp again to switch back to ego perspective."
 	}
 
 	"Wait for t to hide"
