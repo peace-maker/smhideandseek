@@ -8,6 +8,8 @@
 
 #define PLUGIN_VERSION "1.3"
 
+#define MAX_LANGUAGES 27
+
 #define PREFIX "\x04Hide and Seek \x01> \x03"
 
 // plugin cvars
@@ -36,7 +38,8 @@ new Handle:hns_cfg_auto_thirdperson = INVALID_HANDLE;
 new bool:g_EnableHnS = true;
 
 // config and menu handles
-new Handle:mainmenu;
+new Handle:g_ModelMenu[MAX_LANGUAGES] = {INVALID_HANDLE, ...};
+new String:g_ModelMenuLanguage[MAX_LANGUAGES][4];
 new Handle:kv;
 
 // offsets
@@ -228,7 +231,7 @@ public OnMapStart()
 	if(!g_EnableHnS)
 		return;
 	
-	mainmenu = BuildMainMenu();
+	BuildMainMenu();
 	for(new i=0;i<sizeof(whistle_sounds);i++)
 		PrecacheSound(whistle_sounds[i], true);
 	
@@ -279,7 +282,15 @@ public OnMapEnd()
 		return;
 	
 	CloseHandle(kv);
-	CloseHandle(mainmenu);
+	for(new i=0;i<MAX_LANGUAGES;i++)
+	{
+		if(g_ModelMenu[i] != INVALID_HANDLE)
+		{
+			CloseHandle(g_ModelMenu[i]);
+			g_ModelMenu[i] = INVALID_HANDLE;
+		}
+		Format(g_ModelMenuLanguage[i], 4, "");
+	}
 }
 
 public OnClientPutInServer(client)
@@ -435,7 +446,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		if(GetConVarBool(hns_cfg_autochoose))
 			SetRandomModel(client);
 		else
-			DisplayMenu(mainmenu, client, RoundToFloor(GetConVarFloat(hns_cfg_changelimittime)));
+			DisplayMenu(g_ModelMenu[GetClientLanguageID(client)], client, RoundToFloor(GetConVarFloat(hns_cfg_changelimittime)));
 		
 		if(GetConVarBool(hns_cfg_freezects))
 			PrintToChat(client, "%s%t", PREFIX, "seconds to hide", RoundToFloor(GetConVarFloat(hns_cfg_freezetime)));
@@ -687,6 +698,7 @@ public Action:DisableModelMenu(Handle:timer, any:client)
 	if(GetClientTeam(client) == 2 && g_ModelChangeCount[client] == 0)
 	{
 		// give him a random one.
+		PrintToChat(client, "%s%t", PREFIX, "Did not choose model");
 		SetRandomModel(client);
 	}
 	
@@ -794,7 +806,7 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 // say /hide /hidemenu
 public Action:Menu_SelectModel(client,args)
 {
-	if (!g_EnableHnS || mainmenu == INVALID_HANDLE)
+	if (!g_EnableHnS || g_ModelMenu[GetClientLanguageID(client)] == INVALID_HANDLE)
 	{
 		return Plugin_Handled;
 	}
@@ -807,7 +819,7 @@ public Action:Menu_SelectModel(client,args)
 			if(GetConVarBool(hns_cfg_autochoose))
 				SetRandomModel(client);
 			else
-				DisplayMenu(mainmenu, client, RoundToFloor(GetConVarFloat(hns_cfg_changelimittime)));
+				DisplayMenu(g_ModelMenu[GetClientLanguageID(client)], client, RoundToFloor(GetConVarFloat(hns_cfg_changelimittime)));
 		}
 		else
 			PrintToChat(client, "%s%t", PREFIX, "Modelmenu Disabled");
@@ -1073,7 +1085,6 @@ public Menu_Group(Handle:menu, MenuAction:action, client, param2)
 			}
 		} else if(action == MenuAction_Cancel)
 		{
-			
 			PrintToChat(client, "%s%t", PREFIX, "Type !hide");
 		}
 	}
@@ -1085,14 +1096,12 @@ public Menu_Group(Handle:menu, MenuAction:action, client, param2)
 * 
 */
 
-// read the hide_and_seek.cfg config
-// add all models to the menu
-Handle:BuildMainMenu()
+// read the hide_and_seek map config
+// add all models to the menus according to the language
+BuildMainMenu()
 {
 	g_TotalModelsAvailable = 0;
-	
-	new Handle:menu = CreateMenu(Menu_Group);
-	
+		
 	kv = CreateKeyValues("Models");
 	new String:file[256], String:map[64], String:title[64], String:finalOutput[100];
 	GetCurrentMap(map, sizeof(map));
@@ -1101,27 +1110,123 @@ Handle:BuildMainMenu()
 	
 	if (!KvGotoFirstSubKey(kv))
 	{
-		return INVALID_HANDLE;
+		SetFailState("Can't parse modelconfig file for map %s.", map);
+		return;
 	}
 	
 	decl String:name[30];
+	decl String:lang[4];
 	decl String:path[100];
+	new langID, nextLangID = -1;
 	do
 	{
-		KvGetString(kv, "name", name, sizeof(name));
-		KvGetString(kv, "path", path, sizeof(path));
+		// get the model path and precache it
+		KvGetSectionName(kv, path, sizeof(path));
 		FormatEx(finalOutput, sizeof(finalOutput), "models/%s.mdl", path);
 		PrecacheModel(finalOutput, true);
-		AddMenuItem(menu, finalOutput, name);
+		
+		// roll through all available languages
+		for(new i=0;i<GetLanguageCount();i++)
+		{
+			GetLanguageInfo(i, lang, sizeof(lang));
+			// search for the translation
+			KvGetString(kv, lang, name, sizeof(name));
+			if(strlen(name) > 0)
+			{
+				// language already in array, only in the wrong order in the file?
+				langID = GetLanguageID(lang);
+				
+				// language new?
+				if(langID == -1)
+				{
+					nextLangID = GetNextLangID();
+					g_ModelMenuLanguage[nextLangID] = lang;
+				}
+				
+				if(langID == -1 && g_ModelMenu[nextLangID] == INVALID_HANDLE)
+				{
+					// new language, create the menu
+					g_ModelMenu[nextLangID] = CreateMenu(Menu_Group);
+					FormatEx(title, sizeof(title), "%T:", "Title Select Model", LANG_SERVER);
+					
+					SetMenuTitle(g_ModelMenu[nextLangID], title);
+					SetMenuExitButton(g_ModelMenu[nextLangID], false);
+				}
+				
+				// add it to the menu
+				if(langID == -1)
+					AddMenuItem(g_ModelMenu[nextLangID], finalOutput, name);
+				else
+					AddMenuItem(g_ModelMenu[langID], finalOutput, name);
+			}
+			
+		}
+		
 		g_TotalModelsAvailable++;
 	} while (KvGotoNextKey(kv));
 	KvRewind(kv);
 	
-	FormatEx(title, sizeof(title), "%t:", "Title Select Model");
-	SetMenuTitle(menu, title);
-	SetMenuExitButton(menu, false);
-	
-	return menu;
+	if (g_TotalModelsAvailable == 0)
+	{
+		SetFailState("No models parsed in %s.cfg", map);
+		return;
+	}
+}
+
+GetLanguageID(const String:langCode[])
+{
+	for(new i=0;i<MAX_LANGUAGES;i++)
+	{
+		if(StrEqual(g_ModelMenuLanguage[i], langCode))
+			return i;
+	}
+	return -1;
+}
+
+GetClientLanguageID(client)
+{
+	decl String:langCode[4];
+	GetLanguageInfo(GetClientLanguage(client), langCode, sizeof(langCode));
+	// is client's prefered language available?
+	new langID = GetLanguageID(langCode);
+	if(langID != -1)
+		return langID; // yes.
+	else
+	{
+		GetLanguageInfo(GetServerLanguage(), langCode, sizeof(langCode));
+		// is default server language available?
+		langID = GetLanguageID(langCode);
+		if(langID != -1)
+			return langID; // yes.
+		else
+		{
+			// default to english
+			for(new i=0;i<MAX_LANGUAGES;i++)
+			{
+				if(StrEqual(g_ModelMenuLanguage[i], "en"))
+					return i;
+			}
+			
+			// english not found? happens on custom map configs e.g.
+			// use the first language available
+			// this should always work, since we would have SetFailState() on parse
+			if(strlen(g_ModelMenuLanguage[0]) > 0)
+				return 0;
+		}
+	}
+	// this should never happen
+	return -1;
+}
+
+GetNextLangID()
+{
+	for(new i=0;i<MAX_LANGUAGES;i++)
+	{
+		if(strlen(g_ModelMenuLanguage[i]) == 0)
+			return i;
+	}
+	SetFailState("Can't handle more than %d languages. Increase MAX_LANGUAGES and recompile.", MAX_LANGUAGES);
+	return -1;
 }
 
 // Check if a player has a bad convar value set
@@ -1187,7 +1292,7 @@ SetRandomModel(client)
 	FormatEx(finalPath, sizeof(finalPath), "models/%s.mdl", ModelPath);
 	KvRewind(kv);
 	SetEntityModel(client, finalPath);
-	PrintToChat(client, "%s%t", PREFIX, "Did not choose model");
+	
 	PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", ModelName);
 	g_ModelChangeCount[client]++;
 }
@@ -1301,8 +1406,15 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		// close handles
 		if(kv != INVALID_HANDLE)
 			CloseHandle(kv);
-		if(mainmenu != INVALID_HANDLE)
-			CloseHandle(mainmenu);
+		for(new i=0;i<MAX_LANGUAGES;i++)
+		{
+			if(g_ModelMenu[i] != INVALID_HANDLE)
+			{
+				CloseHandle(g_ModelMenu[i]);
+				g_ModelMenu[i] = INVALID_HANDLE;
+			}
+			Format(g_ModelMenuLanguage[i], 4, "");
+		}
 		
 		for(new c=1;c<MaxClients;c++)
 		{
