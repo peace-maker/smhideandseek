@@ -6,11 +6,12 @@
 #undef REQUIRE_EXTENSIONS
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "1.2.3"
+#define PLUGIN_VERSION "1.3"
 
 #define PREFIX "\x04Hide and Seek \x01> \x03"
 
 // plugin cvars
+new Handle:hns_cfg_enable = INVALID_HANDLE;
 new Handle:hns_cfg_freezects = INVALID_HANDLE;
 new Handle:hns_cfg_freezetime = INVALID_HANDLE;
 new Handle:hns_cfg_changelimit = INVALID_HANDLE;
@@ -31,6 +32,10 @@ new Handle:hns_cfg_disable_rightknife = INVALID_HANDLE;
 new Handle:hns_cfg_disable_ducking = INVALID_HANDLE;
 new Handle:hns_cfg_auto_thirdperson = INVALID_HANDLE;
 
+// primary enableswitch
+new bool:g_EnableHnS = true;
+
+// config and menu handles
 new Handle:mainmenu;
 new Handle:kv;
 
@@ -42,6 +47,7 @@ new bool:g_InThirdPersonView[MAXPLAYERS+1] = {false,...};
 
 new g_FirstCTSpawn = 0;
 new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
+new Handle:g_SpamCommandsTimer = INVALID_HANDLE;
 
 // Cheat cVar part
 new Handle:g_CheckVarTimer[MAXPLAYERS+1] = {INVALID_HANDLE,...};
@@ -84,6 +90,7 @@ new forced_values[] = {0, // mp_flashlight
 					   1, // mp_playerid
 					   0 //sv_allowminmodels
 					  };
+new previous_values[11] = {0,...}; // save previous values when forcing above, so we can restore the config if hns is disabled midgame. !same as comment next line!
 new Handle:g_ProtectedConvar[11] = {INVALID_HANDLE,...}; // 11 = amount of protected_cvars. update if you add one.
 new Handle:g_forceCamera = INVALID_HANDLE;
 
@@ -105,6 +112,7 @@ public OnPluginStart()
 	CreateConVar("sm_hns_version", PLUGIN_VERSION, "Hide and seek", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
 	
 	// Config cvars
+	hns_cfg_enable = 			CreateConVar("sm_hns_enable", "1", "Enable the Hide and Seek Mod?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_freezects = 		CreateConVar("sm_hns_freezects", "1", "Should CTs get freezed and blinded on spawn?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_freezetime = 		CreateConVar("sm_hns_freezetime", "25.0", "How long should the CTs are freezed after spawn?", FCVAR_PLUGIN, true, 1.00, true, 120.00);
 	hns_cfg_changelimit = 		CreateConVar("sm_hns_changelimit", "2", "How often a T is allowed to choose his model ingame? 0 = unlimited", FCVAR_PLUGIN, true, 0.00);
@@ -125,16 +133,25 @@ public OnPluginStart()
 	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "0", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
-	HookConVarChange(hns_cfg_hidersspeed, OnChangeHiderSpeed);
+	g_EnableHnS = GetConVarBool(hns_cfg_enable);
+	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
 	
-	// Hooking events
-	HookEvent("player_spawn", Event_OnPlayerSpawn);
-	HookEvent("player_hurt", Event_OnPlayerHurt);
-	HookEvent("weapon_fire", Event_OnWeaponFire);
-	HookEvent("player_death", Event_OnPlayerDeath);
-	HookEvent("round_start", Event_OnRoundStart);
-	HookEvent("round_end", Event_OnRoundEnd);
-	HookEvent("item_pickup", Event_OnItemPickup);
+	if(g_EnableHnS)
+	{
+		// !ToDo: Exclude hooks and other EnableHnS dependand functions into one seperate function.
+		// Now you need to add the hooks to the Cfg_OnChangeEnable callback too..
+		HookConVarChange(hns_cfg_hidersspeed, OnChangeHiderSpeed);
+		HookConVarChange(hns_cfg_anticheat, OnChangeAntiCheat);
+		
+		// Hooking events
+		HookEvent("player_spawn", Event_OnPlayerSpawn);
+		HookEvent("player_hurt", Event_OnPlayerHurt);
+		HookEvent("weapon_fire", Event_OnWeaponFire);
+		HookEvent("player_death", Event_OnPlayerDeath);
+		HookEvent("round_start", Event_OnRoundStart);
+		HookEvent("round_end", Event_OnRoundEnd);
+		HookEvent("item_pickup", Event_OnItemPickup);
+	}
 	
 	
 	// Register console commands
@@ -146,14 +163,14 @@ public OnPluginStart()
 	RegConsoleCmd("jointeam", Command_JoinTeam);
 	RegConsoleCmd("whistle", Play_Whistle);
 	RegConsoleCmd("whoami", Display_ModelName);
-	if(GetConVarBool(hns_cfg_anticheat))
-		RegConsoleCmd("overview_mode", Block_Cmd);
+	RegConsoleCmd("overview_mode", Block_Cmd);
 	
 	RegAdminCmd("sm_hns_force_whistle", ForceWhistle, ADMFLAG_CHAT, "Force a player to whistle");
 		
 	// Loading translations
 	LoadTranslations("plugin.hide_and_seek");
 	LoadTranslations("common.phrases"); // for FindTarget()
+	
 	
 	// set the default values for cvar checking
 	for(new x=0;x<MaxClients;x++)
@@ -163,19 +180,22 @@ public OnPluginStart()
 			g_ConVarMessage[x][y] = 0;
 		}
 	
-	// set bad server cvars
-	for(new i=0;i<sizeof(protected_cvars);i++)
+	if(g_EnableHnS)
 	{
-		g_ProtectedConvar[i] = FindConVar(protected_cvars[i]);
-		SetConVarInt(g_ProtectedConvar[i], forced_values[i], true);
-		HookConVarChange(g_ProtectedConvar[i], OnCvarChange);
+		// set bad server cvars
+		for(new i=0;i<sizeof(protected_cvars);i++)
+		{
+			g_ProtectedConvar[i] = FindConVar(protected_cvars[i]);
+			previous_values[i] = GetConVarInt(g_ProtectedConvar[i]);
+			SetConVarInt(g_ProtectedConvar[i], forced_values[i], true);
+			HookConVarChange(g_ProtectedConvar[i], OnCvarChange);
+		}
+		// start advertising spam
+		g_SpamCommandsTimer = CreateTimer(120.0, SpamCommands, 0);
 	}
 	
 	// hook forcecamera
 	g_forceCamera = FindConVar("mp_forcecamera");
-	
-	// start advertising spam
-	CreateTimer(120.0, SpamCommands, 0);
 	
 	// get the offsets
 	// for weapon stripping without sdkhooks
@@ -205,6 +225,9 @@ public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
 */ 
 public OnMapStart()
 {
+	if(!g_EnableHnS)
+		return;
+	
 	mainmenu = BuildMainMenu();
 	for(new i=0;i<sizeof(whistle_sounds);i++)
 		PrecacheSound(whistle_sounds[i], true);
@@ -252,12 +275,18 @@ public OnMapStart()
 
 public OnMapEnd()
 {
+	if(!g_EnableHnS)
+		return;
+	
 	CloseHandle(kv);
 	CloseHandle(mainmenu);
 }
 
 public OnClientPutInServer(client)
 {
+	if(!g_EnableHnS)
+		return;
+	
 	if(!IsFakeClient(client) && GetConVarBool(hns_cfg_anticheat))
 		g_CheckVarTimer[client] = CreateTimer(1.0, StartVarChecker, client, TIMER_REPEAT);
 	
@@ -267,6 +296,9 @@ public OnClientPutInServer(client)
 
 public OnClientDisconnect(client)
 {
+	if(!g_EnableHnS)
+		return;
+	
 	// set the default values for cvar checking
 	if(!IsFakeClient(client))
 	{
@@ -303,12 +335,14 @@ public OnClientDisconnect(client)
 		KillTimer(g_CheckVarTimer[client]);
 		g_CheckVarTimer[client] = INVALID_HANDLE;
 	}*/
-
 }
 
 // prevent players from ducking
 public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon)
 {
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
 	decl String:weaponName[30];
 	// don't allow ct's to shoot in the beginning of the round
 	new team = GetClientTeam(client);
@@ -330,14 +364,15 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 	return Plugin_Continue;
 }
 
+// SDKHook Callback
 public Action:OnWeaponCanUse(client, weapon)
 {
 	// Allow only CTs to use a weapon
-	if(GetClientTeam(client) == 3)
+	if(g_EnableHnS && GetClientTeam(client) != 3)
 	{
-		return Plugin_Continue;    
+		return Plugin_Handled;
 	}
-	return Plugin_Handled;
+	return Plugin_Continue;
 }
 
 
@@ -392,7 +427,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			g_AllowModelChangeTimer[client] = CreateTimer(GetConVarFloat(hns_cfg_changelimittime), DisableModelMenu, client);
 			// Set them to thirdperson automatically
 			if(GetConVarBool(hns_cfg_auto_thirdperson))
-				Third_Person(client, 0);
+				Third_Person(client, 2);
 		}
 		
 		g_WhistleCount[client] = 0;
@@ -729,7 +764,7 @@ public Action:SpamCommands(Handle:timer, any:data)
 			if(IsClientInGame(i) && GetClientTeam(i) == 2)
 				PrintToChat(i, "%s%t", PREFIX, "T type /tp");
 	}
-	CreateTimer(120.0, SpamCommands, (data==0?1:0));
+	g_SpamCommandsTimer = CreateTimer(120.0, SpamCommands, (data==0?1:0));
 	return Plugin_Handled;
 }
 
@@ -759,7 +794,7 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 // say /hide /hidemenu
 public Action:Menu_SelectModel(client,args)
 {
-	if (mainmenu == INVALID_HANDLE)
+	if (!g_EnableHnS || mainmenu == INVALID_HANDLE)
 	{
 		return Plugin_Handled;
 	}
@@ -787,7 +822,7 @@ public Action:Menu_SelectModel(client,args)
 // say /tp /third /thirdperson
 public Action:Third_Person(client, args)
 {
-	if (!IsClientInGame(client) || !IsPlayerAlive(client))
+	if (!g_EnableHnS || !IsClientInGame(client) || !IsPlayerAlive(client))
 		return Plugin_Handled;
 	
 	// Only allow Terrorists to use thirdperson view
@@ -804,7 +839,9 @@ public Action:Third_Person(client, args)
 		SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 0);
 		SetEntProp(client, Prop_Send, "m_iFOV", 120);
 		g_InThirdPersonView[client] = true;
-		PrintToChat(client, "%s%t", PREFIX, "Type again for ego");
+		// hacky way of not showing the message if autochoose is enabled
+		if(args != 2)
+			PrintToChat(client, "%s%t", PREFIX, "Type again for ego");
 	}
 	else
 	{
@@ -822,7 +859,7 @@ public Action:Third_Person(client, args)
 // handle the team sizes
 public Action:Command_JoinTeam(client, args)
 {
-	if (!client || !IsClientInGame(client))
+	if (!g_EnableHnS || !client || !IsClientInGame(client))
 	{
 		return Plugin_Continue;
 	}
@@ -903,7 +940,7 @@ public Action:Command_JoinTeam(client, args)
 public Action:Play_Whistle(client,args)
 {
 	// check if whistling is enabled
-	if(!GetConVarBool(hns_cfg_whistle) || !IsPlayerAlive(client))
+	if(!g_EnableHnS || !GetConVarBool(hns_cfg_whistle) || !IsPlayerAlive(client))
 		return Plugin_Handled;
 	
 	// only Ts are allowed to whistle
@@ -929,11 +966,12 @@ public Action:Play_Whistle(client,args)
 	
 	return Plugin_Handled;
 }
-
+// say /whoami
+// displays the model name in chat again
 public Action:Display_ModelName(client,args)
 {
 	// only enable command, if player already chose a model
-	if(!IsPlayerAlive(client) || g_ModelChangeCount[client] == 0)
+	if(!g_EnableHnS || !IsPlayerAlive(client) || g_ModelChangeCount[client] == 0)
 		return Plugin_Handled;
 	
 	// only Ts can use a model
@@ -970,7 +1008,11 @@ public Action:Display_ModelName(client,args)
 
 public Action:Block_Cmd(client,args)
 {
-	return Plugin_Handled;
+	// only block if anticheat is enabled
+	if(g_EnableHnS && GetConVarBool(hns_cfg_anticheat))
+		return Plugin_Handled;
+	else
+		return Plugin_Continue;
 }
 
 // Admin Command
@@ -978,7 +1020,7 @@ public Action:Block_Cmd(client,args)
 // Forces a terrorist player to whistle
 public Action:ForceWhistle(client, args)
 {
-	if(!GetConVarBool(hns_cfg_whistle))
+	if(!g_EnableHnS || !GetConVarBool(hns_cfg_whistle))
 	{
 		ReplyToCommand(client, "Disabled.");
 		return Plugin_Handled;
@@ -1181,6 +1223,160 @@ public OnChangeHiderSpeed(Handle:convar, const String:oldValue[], const String:n
 	}
 }
 
+// directly change the hider speed on change
+public OnChangeAntiCheat(Handle:convar, const String:oldValue[], const String:newValue[])
+{
+	if(StrEqual(oldValue, newValue))
+		return;
+	
+	// disable anticheat
+	if(StrEqual(newValue, "0"))
+	{
+		for(new i=1;i<MaxClients;i++)
+		{
+			if(IsClientInGame(i) && !IsFakeClient(i) && g_CheckVarTimer[i] != INVALID_HANDLE)
+			{
+				KillTimer(g_CheckVarTimer[i]);
+				g_CheckVarTimer[i] = INVALID_HANDLE;
+			}
+		}
+	}
+	// enable anticheat
+	else if(StrEqual(newValue, "1"))
+	{
+		for(new i=1;i<MaxClients;i++)
+		{
+			if(IsClientInGame(i) && !IsFakeClient(i) && g_CheckVarTimer[i] == INVALID_HANDLE)
+			{
+				g_CheckVarTimer[i] = CreateTimer(1.0, StartVarChecker, i, TIMER_REPEAT);
+			}
+		}
+	}
+}
+
+// disable/enable plugin and restart round
+public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:newValue[])
+{
+	// don't execute if it's unchanged
+	if(StrEqual(oldValue, newValue))
+		return;
+	
+	// disable - it's been enabled before.
+	if(StrEqual(newValue, "0"))
+	{
+		UnhookConVarChange(hns_cfg_anticheat, OnChangeAntiCheat);
+		UnhookConVarChange(hns_cfg_hidersspeed, OnChangeHiderSpeed);
+		
+		// Unhooking events
+		UnhookEvent("player_spawn", Event_OnPlayerSpawn);
+		UnhookEvent("player_hurt", Event_OnPlayerHurt);
+		UnhookEvent("weapon_fire", Event_OnWeaponFire);
+		UnhookEvent("player_death", Event_OnPlayerDeath);
+		UnhookEvent("round_start", Event_OnRoundStart);
+		UnhookEvent("round_end", Event_OnRoundEnd);
+		UnhookEvent("item_pickup", Event_OnItemPickup);
+		
+		// unprotect the cvars
+		for(new i=0;i<sizeof(protected_cvars);i++)
+		{
+			// reset old cvar values
+			UnhookConVarChange(g_ProtectedConvar[i], OnCvarChange);
+			SetConVarInt(g_ProtectedConvar[i], previous_values[i], true);
+		}
+		
+		// stop advertising spam
+		if(g_SpamCommandsTimer != INVALID_HANDLE)
+		{
+			KillTimer(g_SpamCommandsTimer);
+			g_SpamCommandsTimer = INVALID_HANDLE;
+		}
+		
+		// stop countdown
+		if(g_ShowCountdownTimer != INVALID_HANDLE)
+		{
+			KillTimer(g_ShowCountdownTimer);
+			g_ShowCountdownTimer = INVALID_HANDLE;
+		}
+		
+		// close handles
+		if(kv != INVALID_HANDLE)
+			CloseHandle(kv);
+		if(mainmenu != INVALID_HANDLE)
+			CloseHandle(mainmenu);
+		
+		for(new c=1;c<MaxClients;c++)
+		{
+			if(!IsClientInGame(c))
+				continue;
+			
+			// stop cheat checking
+			if(!IsFakeClient(c) && g_CheckVarTimer[c] != INVALID_HANDLE)
+			{
+				KillTimer(g_CheckVarTimer[c]);
+				g_CheckVarTimer[c] = INVALID_HANDLE;
+			}
+			
+			// Unhook weapon pickup
+			SDKUnhook(c, SDKHook_WeaponCanUse, OnWeaponCanUse);
+			
+			// reset every players vars
+			OnClientDisconnect(c);
+		}
+		
+		g_EnableHnS = false;
+		// restart game to reset the models and scores
+		ServerCommand("mp_restartgame 1");
+	}
+	else if(StrEqual(newValue, "1"))
+	{
+		// hook the convars again
+		HookConVarChange(hns_cfg_hidersspeed, OnChangeHiderSpeed);
+		HookConVarChange(hns_cfg_anticheat, OnChangeAntiCheat);
+		
+		// Hook events again
+		HookEvent("player_spawn", Event_OnPlayerSpawn);
+		HookEvent("player_hurt", Event_OnPlayerHurt);
+		HookEvent("weapon_fire", Event_OnWeaponFire);
+		HookEvent("player_death", Event_OnPlayerDeath);
+		HookEvent("round_start", Event_OnRoundStart);
+		HookEvent("round_end", Event_OnRoundEnd);
+		HookEvent("item_pickup", Event_OnItemPickup);
+		
+		// set bad server cvars
+		for(new i=0;i<sizeof(protected_cvars);i++)
+		{
+			g_ProtectedConvar[i] = FindConVar(protected_cvars[i]);
+			previous_values[i] = GetConVarInt(g_ProtectedConvar[i]);
+			SetConVarInt(g_ProtectedConvar[i], forced_values[i], true);
+			HookConVarChange(g_ProtectedConvar[i], OnCvarChange);
+		}
+		// start advertising spam
+		g_SpamCommandsTimer = CreateTimer(120.0, SpamCommands, 0);
+		
+		for(new c=1;c<MaxClients;c++)
+		{
+			if(!IsClientInGame(c))
+				continue;
+			
+			// start cheat checking
+			if(!IsFakeClient(c) && GetConVarBool(hns_cfg_anticheat) && g_CheckVarTimer[c] == INVALID_HANDLE)
+			{
+				g_CheckVarTimer[c] = CreateTimer(1.0, StartVarChecker, c, TIMER_REPEAT);
+			}
+			
+			// Hook weapon pickup
+			SDKHook(c, SDKHook_WeaponCanUse, OnWeaponCanUse);
+		}
+		
+		g_EnableHnS = true;
+		// build the menu and setup the hostage_rescue zone
+		OnMapStart();
+		
+		// restart game to reset the models and scores
+		ServerCommand("mp_restartgame 1");
+	}
+}
+
 // check the given cheat cvars on every client
 public ClientConVar(QueryCookie:cookie, client, ConVarQueryResult:result, const String:cvarName[], const String:cvarValue[])
 {
@@ -1199,7 +1395,7 @@ public ClientConVar(QueryCookie:cookie, client, ConVarQueryResult:result, const 
 			g_ConVarViolation[client][i] = true;
 			if(g_ConVarMessage[client][i] == 0)
 			{
-				PrintToChat(client, "%s%t \x04%s 0", PREFIX, "Print to console", cvarName);
+				PrintToChat(client, "%s%t\x04 %s 0", PREFIX, "Print to console", cvarName);
 				PrintHintText(client, "%t %s 0", "Print to console", cvarName);
 			}
 			g_ConVarMessage[client][i]++;

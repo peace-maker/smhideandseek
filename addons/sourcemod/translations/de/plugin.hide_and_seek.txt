@@ -18,7 +18,7 @@
 
 	"Did not choose model"
 	{
-		"en"			"Du hast kein Model ausgewählt. Autmatische Zuweisung..."
+		"en"			"Du hast kein Model ausgewählt. Automatische Zuweisung..."
 	}
 	
 	"Print to console"
