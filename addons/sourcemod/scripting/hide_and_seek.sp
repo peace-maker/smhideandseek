@@ -7,6 +7,9 @@
 
 #define PLUGIN_VERSION "1.3"
 
+// uncomment, if you need to force some cvars on clients
+//#define ENABLE_ANTICHEAT
+
 // that's what GetLanguageCount() got me
 #define MAX_LANGUAGES 27
 
@@ -21,8 +24,10 @@ new Handle:hns_cfg_changelimittime = INVALID_HANDLE;
 new Handle:hns_cfg_autochoose = INVALID_HANDLE;
 new Handle:hns_cfg_whistle = INVALID_HANDLE;
 new Handle:hns_cfg_whistle_times = INVALID_HANDLE;
+#if defined ANTI_CHEAT
 new Handle:hns_cfg_anticheat = INVALID_HANDLE;
 new Handle:hns_cfg_cheat_punishment = INVALID_HANDLE;
+#endif
 new Handle:hns_cfg_hider_win_frags = INVALID_HANDLE;
 new Handle:hns_cfg_hp_seeker_enable = INVALID_HANDLE;
 new Handle:hns_cfg_hp_seeker_dec = INVALID_HANDLE;
@@ -54,12 +59,14 @@ new g_FirstCTSpawn = 0;
 new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
 new Handle:g_SpamCommandsTimer = INVALID_HANDLE;
 
+#if defined ANTI_CHEAT
 // Cheat cVar part
 new Handle:g_CheckVarTimer[MAXPLAYERS+1] = {INVALID_HANDLE,...};
 new String:cheat_commands[][] = {"overview_preferred_mode"};
 new bool:g_ConVarViolation[MAXPLAYERS+1][1]; // 1 = amount of cheat_commands. update if you add one.
 new g_ConVarMessage[MAXPLAYERS+1][1]; // 1 = amount of cheat_commands. update if you add one.
 new Handle:g_CheatPunishTimer[MAXPLAYERS+1] = {INVALID_HANDLE};
+#endif
 
 // Terrorist Modelchange stuff
 new g_TotalModelsAvailable = 0;
@@ -125,8 +132,10 @@ public OnPluginStart()
 	hns_cfg_autochoose = 		CreateConVar("sm_hns_autochoose", "0", "Should the plugin choose models for the hiders automatically?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_whistle = 			CreateConVar("sm_hns_whistle", "1", "Are terrorists allowed to whistle?", FCVAR_PLUGIN);
 	hns_cfg_whistle_times = 	CreateConVar("sm_hns_whistle_times", "5", "How many times a hider is allowed to whistle per round?", FCVAR_PLUGIN);
+#if defined ANTI_CHEAT
 	hns_cfg_anticheat = 		CreateConVar("sm_hns_anticheat", "1", "Check player cheat convars, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_cheat_punishment = 	CreateConVar("sm_hns_cheat_punishment", "1", "How to punish players with wrong cvar values after 15 seconds? 0: Disabled. 1: Switch to Spectator. 2: Kick", FCVAR_PLUGIN, true, 0.00, true, 2.00);
+#endif
 	hns_cfg_hider_win_frags = 	CreateConVar("sm_hns_hider_win_frags", "5", "How many frags should surviving terrorists gain?", FCVAR_PLUGIN, true, 0.00, true, 10.00);
 	hns_cfg_hp_seeker_enable = 	CreateConVar("sm_hns_hp_seeker_enable", "1", "Should CT lose HP when shooting, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_hp_seeker_dec = 	CreateConVar("sm_hns_hp_seeker_dec", "5", "How many hp should a CT lose on shooting?", FCVAR_PLUGIN, true, 0.00);
@@ -146,7 +155,10 @@ public OnPluginStart()
 		// !ToDo: Exclude hooks and other EnableHnS dependand functions into one seperate function.
 		// Now you need to add the hooks to the Cfg_OnChangeEnable callback too..
 		HookConVarChange(hns_cfg_hidersspeed, OnChangeHiderSpeed);
+		
+#if defined ANTI_CHEAT
 		HookConVarChange(hns_cfg_anticheat, OnChangeAntiCheat);
+#endif
 		
 		// Hooking events
 		HookEvent("player_spawn", Event_OnPlayerSpawn);
@@ -167,7 +179,10 @@ public OnPluginStart()
 	RegConsoleCmd("jointeam", Command_JoinTeam);
 	RegConsoleCmd("whistle", Play_Whistle);
 	RegConsoleCmd("whoami", Display_ModelName);
+	
+#if defined ANTI_CHEAT
 	RegConsoleCmd("overview_mode", Block_Cmd);
+#endif
 	
 	RegAdminCmd("sm_hns_force_whistle", ForceWhistle, ADMFLAG_CHAT, "Force a player to whistle");
 		
@@ -175,7 +190,7 @@ public OnPluginStart()
 	LoadTranslations("plugin.hide_and_seek");
 	LoadTranslations("common.phrases"); // for FindTarget()
 	
-	
+#if defined ANTI_CHEAT
 	// set the default values for cvar checking
 	for(new x=0;x<MaxClients;x++)
 		for(new y=0;y<sizeof(cheat_commands);y++)
@@ -183,7 +198,8 @@ public OnPluginStart()
 			g_ConVarViolation[x][y] = false;
 			g_ConVarMessage[x][y] = 0;
 		}
-	
+#endif
+
 	if(g_EnableHnS)
 	{
 		// set bad server cvars
@@ -299,8 +315,10 @@ public OnClientPutInServer(client)
 	if(!g_EnableHnS)
 		return;
 	
+#if defined ANTI_CHEAT
 	if(!IsFakeClient(client) && GetConVarBool(hns_cfg_anticheat))
 		g_CheckVarTimer[client] = CreateTimer(1.0, StartVarChecker, client, TIMER_REPEAT);
+#endif
 	
 	// Hook weapon pickup
 	SDKHook(client, SDKHook_WeaponCanUse, OnWeaponCanUse);
@@ -314,21 +332,25 @@ public OnClientDisconnect(client)
 	// set the default values for cvar checking
 	if(!IsFakeClient(client))
 	{
+#if defined ANTI_CHEAT
 		for(new i=0;i<sizeof(cheat_commands);i++)
 		{
 			g_ConVarViolation[client][i] = false;
 			g_ConVarMessage[client][i] = 0;
 		}
+#endif
 	
 		g_InThirdPersonView[client] = false;
 		g_ModelChangeCount[client] = 0;
 		g_IsCTWaiting[client] = false;
 		g_WhistleCount[client] = 0;
+#if defined ANTI_CHEAT
 		if (g_CheatPunishTimer[client] != INVALID_HANDLE)
 		{
 			KillTimer(g_CheatPunishTimer[client]);
 			g_CheatPunishTimer[client] = INVALID_HANDLE;
 		}
+#endif
 		if (g_AllowModelChange[client] && g_AllowModelChangeTimer[client] != INVALID_HANDLE)
 		{
 			KillTimer(g_AllowModelChangeTimer[client]);
@@ -545,7 +567,6 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 	
 	// show the roundtime in env_hudhint entity
 	new realRoundTime = RoundToNearest(GetConVarFloat(g_roundTime)*60.0);
-	// 0.9 because of caluclation lags, that would get the time behind the real round time
 	g_RoundTimeTimer = CreateTimer(0.9, ShowRoundTime, realRoundTime, TIMER_FLAG_NO_MAPCHANGE);
 }
 // give terrorists frags
@@ -676,8 +697,13 @@ public Action:UnFreezePlayer(Handle:timer, any:client)
 		return Plugin_Handled;
 	
 	SetEntityMoveType(client, MOVETYPE_WALK);
+	
+#if defined ANTI_CHEAT
 	if(!IsConVarCheater(client))
 		PerformBlind(client, 0);
+#else
+	PerformBlind(client, 0);
+#endif
 	
 	g_IsCTWaiting[client] = false;
 	
@@ -712,6 +738,7 @@ public Action:DisableModelMenu(Handle:timer, any:client)
 	return Plugin_Handled;
 }
 
+#if defined ANTI_CHEAT
 public Action:StartVarChecker(Handle:timer, any:client)
 {	
 	if (!IsClientInGame(client))
@@ -771,6 +798,7 @@ public Action:PerformCheatPunishment(Handle:timer, any:client)
 	}
 	return Plugin_Handled;
 }
+#endif
 
 // teach the players the /whistle and /tp commands
 public Action:SpamCommands(Handle:timer, any:data)
@@ -1034,7 +1062,7 @@ public Action:Display_ModelName(client,args)
 		return Plugin_Handled;
 	}
 	
-	decl String:modelName[128];
+	decl String:modelName[128], String:langCode[4];
 	GetClientModel(client, modelName, sizeof(modelName));
 	
 	if (!KvGotoFirstSubKey(kv))
@@ -1045,13 +1073,13 @@ public Action:Display_ModelName(client,args)
 	decl String:name[30], String:path[100], String:fullPath[100];
 	do
 	{
-		KvGetString(kv, "name", name, sizeof(name));
-		KvGetString(kv, "path", path, sizeof(path));
+		KvGetSectionName(kv, path, sizeof(path));
 		FormatEx(fullPath, sizeof(fullPath), "models/%s.mdl", path);
 		if(StrEqual(fullPath, modelName))
 		{
-			KvGetString(kv, "name", name, sizeof(name));
-			PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", name);
+			GetClientLanguageID(client, langCode, sizeof(langCode));
+			KvGetString(kv, langCode, name, sizeof(name));
+			PrintToChat(client, "%s%t\x01 %s.", PREFIX, "Model Changed", name);
 		}
 	} while (KvGotoNextKey(kv));
 	KvRewind(kv);
@@ -1059,6 +1087,7 @@ public Action:Display_ModelName(client,args)
 	return Plugin_Handled;
 }
 
+#if defined ANTI_CHEAT
 public Action:Block_Cmd(client,args)
 {
 	// only block if anticheat is enabled
@@ -1067,6 +1096,7 @@ public Action:Block_Cmd(client,args)
 	else
 		return Plugin_Continue;
 }
+#endif
 
 // Admin Command
 // sm_hns_force_whistle
@@ -1282,6 +1312,7 @@ GetNextLangID()
 	return -1;
 }
 
+#if defined ANTI_CHEAT
 // Check if a player has a bad convar value set
 bool:IsConVarCheater(client)
 {
@@ -1294,6 +1325,7 @@ bool:IsConVarCheater(client)
 	}
 	return false;
 }
+#endif
 
 // Fade a players screen to black (amount=0) or removes the fade (amount=255)
 PerformBlind(client, amount)
@@ -1379,6 +1411,7 @@ public OnChangeHiderSpeed(Handle:convar, const String:oldValue[], const String:n
 	}
 }
 
+#if defined ANTI_CHEAT
 // directly change the hider speed on change
 public OnChangeAntiCheat(Handle:convar, const String:oldValue[], const String:newValue[])
 {
@@ -1409,6 +1442,7 @@ public OnChangeAntiCheat(Handle:convar, const String:oldValue[], const String:ne
 		}
 	}
 }
+#endif
 
 // disable/enable plugin and restart round
 public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:newValue[])
@@ -1420,7 +1454,9 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 	// disable - it's been enabled before.
 	if(StrEqual(newValue, "0"))
 	{
+#if defined ANTI_CHEAT
 		UnhookConVarChange(hns_cfg_anticheat, OnChangeAntiCheat);
+#endif
 		UnhookConVarChange(hns_cfg_hidersspeed, OnChangeHiderSpeed);
 		
 		// Unhooking events
@@ -1482,12 +1518,14 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 			if(!IsClientInGame(c))
 				continue;
 			
+#if defined ANTI_CHEAT
 			// stop cheat checking
 			if(!IsFakeClient(c) && g_CheckVarTimer[c] != INVALID_HANDLE)
 			{
 				KillTimer(g_CheckVarTimer[c]);
 				g_CheckVarTimer[c] = INVALID_HANDLE;
 			}
+#endif
 			
 			// Unhook weapon pickup
 			SDKUnhook(c, SDKHook_WeaponCanUse, OnWeaponCanUse);
@@ -1504,7 +1542,9 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 	{
 		// hook the convars again
 		HookConVarChange(hns_cfg_hidersspeed, OnChangeHiderSpeed);
+#if defined ANTI_CHEAT
 		HookConVarChange(hns_cfg_anticheat, OnChangeAntiCheat);
+#endif
 		
 		// Hook events again
 		HookEvent("player_spawn", Event_OnPlayerSpawn);
@@ -1530,11 +1570,13 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 			if(!IsClientInGame(c))
 				continue;
 			
+#if defined ANTI_CHEAT
 			// start cheat checking
 			if(!IsFakeClient(c) && GetConVarBool(hns_cfg_anticheat) && g_CheckVarTimer[c] == INVALID_HANDLE)
 			{
 				g_CheckVarTimer[c] = CreateTimer(1.0, StartVarChecker, c, TIMER_REPEAT);
 			}
+#endif
 			
 			// Hook weapon pickup
 			SDKHook(c, SDKHook_WeaponCanUse, OnWeaponCanUse);
@@ -1549,6 +1591,7 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 	}
 }
 
+#if defined ANTI_CHEAT
 // check the given cheat cvars on every client
 public ClientConVar(QueryCookie:cookie, client, ConVarQueryResult:result, const String:cvarName[], const String:cvarValue[])
 {
@@ -1579,3 +1622,4 @@ public ClientConVar(QueryCookie:cookie, client, ConVarQueryResult:result, const 
 			g_ConVarViolation[client][i] = false;
 	}
 }
+#endif
