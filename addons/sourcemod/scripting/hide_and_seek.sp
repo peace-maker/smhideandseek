@@ -3,11 +3,11 @@
 #include <sourcemod>
 #include <sdktools>
 
-#undef REQUIRE_EXTENSIONS
 #include <sdkhooks>
 
 #define PLUGIN_VERSION "1.3"
 
+// that's what GetLanguageCount() got me
 #define MAX_LANGUAGES 27
 
 #define PREFIX "\x04Hide and Seek \x01> \x03"
@@ -43,7 +43,6 @@ new String:g_ModelMenuLanguage[MAX_LANGUAGES][4];
 new Handle:kv;
 
 // offsets
-new g_WeaponParent;
 new g_Render;
 
 new bool:g_InThirdPersonView[MAXPLAYERS+1] = {false,...};
@@ -112,7 +111,7 @@ public Plugin:myinfo =
 
 public OnPluginStart()
 {
-	CreateConVar("sm_hns_version", PLUGIN_VERSION, "Hide and seek", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY);
+	CreateConVar("sm_hns_version", PLUGIN_VERSION, "Hide and seek", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY|FCVAR_DONTRECORD);
 	
 	// Config cvars
 	hns_cfg_enable = 			CreateConVar("sm_hns_enable", "1", "Enable the Hide and Seek Mod?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
@@ -153,7 +152,6 @@ public OnPluginStart()
 		HookEvent("player_death", Event_OnPlayerDeath);
 		HookEvent("round_start", Event_OnRoundStart);
 		HookEvent("round_end", Event_OnRoundEnd);
-		HookEvent("item_pickup", Event_OnItemPickup);
 	}
 	
 	
@@ -201,24 +199,12 @@ public OnPluginStart()
 	g_forceCamera = FindConVar("mp_forcecamera");
 	
 	// get the offsets
-	// for weapon stripping without sdkhooks
-	g_WeaponParent = 	FindSendPropOffs("CBaseCombatWeapon", "m_hOwnerEntity");
-	if(g_WeaponParent == -1)
-		SetFailState("Couldnt find the m_hOwnerEntity offset!");
-	
 	// for transparency
 	g_Render = 			FindSendPropOffs("CAI_BaseNPC", "m_clrRender");
 	if(g_Render == -1)
 		SetFailState("Couldnt find the m_clrRender offset!");
 	
 	AutoExecConfig(true, "plugin.hide_and_seek");
-}
-
-public APLRes:AskPluginLoad2(Handle:myself, bool:late, String:error[], err_max)
-{
-	MarkNativeAsOptional("SDKHook");
-	MarkNativeAsOptional("SDKUnhook");
-	return APLRes_Success;
 }
 
 /*
@@ -415,10 +401,6 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			g_AllowModelChangeTimer[client] = INVALID_HANDLE;
 		}
 		g_AllowModelChange[client] = true;
-		
-		// hacky way of avoiding Ts to pickup weapons if no sdkhooks extension is loaded.
-		if(!LibraryExists("sdkhooks"))
-			CreateTimer(0.0, StripWeapons, client);
 		
 		// set the speed
 		SetEntPropFloat(client, Prop_Data, "m_flLaggedMovementValue", GetConVarFloat(hns_cfg_hidersspeed));
@@ -632,18 +614,6 @@ public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBr
 		return;
 	
 	RemoveEdict(ragdoll);
-}
-
-// let t drop every weapon
-public Action:Event_OnItemPickup(Handle:event, const String:name[], bool:dontBroadcast)
-{
-	if(LibraryExists("sdkhooks"))
-		return;
-	new client = GetClientOfUserId(GetEventInt(event, "userid"));
-	if(GetClientTeam(client) == 2)
-	{
-		CreateTimer(0.01, StripWeapons, client);
-	}
 }
 
 /*
@@ -1183,35 +1153,47 @@ GetLanguageID(const String:langCode[])
 	return -1;
 }
 
-GetClientLanguageID(client)
+GetClientLanguageID(client, String:languageCode[]="", maxlen=0)
 {
 	decl String:langCode[4];
 	GetLanguageInfo(GetClientLanguage(client), langCode, sizeof(langCode));
 	// is client's prefered language available?
 	new langID = GetLanguageID(langCode);
 	if(langID != -1)
+	{
+		strcopy(languageCode, maxlen, langCode);
 		return langID; // yes.
+	}
 	else
 	{
 		GetLanguageInfo(GetServerLanguage(), langCode, sizeof(langCode));
 		// is default server language available?
 		langID = GetLanguageID(langCode);
 		if(langID != -1)
+		{
+			strcopy(languageCode, maxlen, langCode);
 			return langID; // yes.
+		}
 		else
 		{
 			// default to english
 			for(new i=0;i<MAX_LANGUAGES;i++)
 			{
 				if(StrEqual(g_ModelMenuLanguage[i], "en"))
+				{
+					strcopy(languageCode, maxlen, "en");
 					return i;
+				}
 			}
 			
 			// english not found? happens on custom map configs e.g.
 			// use the first language available
 			// this should always work, since we would have SetFailState() on parse
 			if(strlen(g_ModelMenuLanguage[0]) > 0)
+			{
+				strcopy(languageCode, maxlen, g_ModelMenuLanguage[0]);
 				return 0;
+			}
 		}
 	}
 	// this should never happen
@@ -1265,35 +1247,33 @@ PerformBlind(client, amount)
 	EndMessage();
 }
 
-public Action:StripWeapons(Handle:timer, any:client)
-{
-	new maxent = GetMaxEntities(), String:eName[64];
-	for (new i=MaxClients;i<maxent;i++)
-	{
-		if ( IsValidEdict(i) && IsValidEntity(i) )
-		{
-			GetEdictClassname(i, eName, sizeof(eName));
-			if((StrContains(eName, "weapon_") != -1 || StrContains(eName, "item_") != -1 ) && GetEntDataEnt2(i, g_WeaponParent) == client)
-			{
-				RemoveEdict(i);
-			}
-		}
-	}
-}
-
+// set a random model to a client
 SetRandomModel(client)
 {
 	// give him a random one.
-	decl String:ModelPath[80], String:finalPath[100], String:ModelName[60], String:RandomNumber[4];
-	IntToString(GetRandomInt(1, g_TotalModelsAvailable), RandomNumber, sizeof(RandomNumber));
-	KvJumpToKey(kv, RandomNumber);
-	KvGetString(kv, "name", ModelName, sizeof(ModelName));
-	KvGetString(kv, "path", ModelPath, sizeof(ModelPath));
-	FormatEx(finalPath, sizeof(finalPath), "models/%s.mdl", ModelPath);
-	KvRewind(kv);
-	SetEntityModel(client, finalPath);
+	decl String:ModelPath[80], String:finalPath[100], String:ModelName[60], String:langCode[4];
+	new RandomNumber = GetRandomInt(0, g_TotalModelsAvailable);	
+	new currentI = 0;
+	KvGotoFirstSubKey(kv);
+	do
+	{
+		if(currentI == RandomNumber)
+		{
+			// set the model
+			KvGetSectionName(kv, ModelPath, sizeof(ModelPath));
+			
+			FormatEx(finalPath, sizeof(finalPath), "models/%s.mdl", ModelPath);
+			SetEntityModel(client, finalPath);
+			
+			// print name in chat
+			GetClientLanguageID(client, langCode, sizeof(langCode));
+			KvGetString(kv, langCode, ModelName, sizeof(ModelName));
+			PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", ModelName);
+		}
+		currentI++;
+	} while (KvGotoNextKey(kv));
 	
-	PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", ModelName);
+	KvRewind(kv);	
 	g_ModelChangeCount[client]++;
 }
 
@@ -1379,7 +1359,6 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		UnhookEvent("player_death", Event_OnPlayerDeath);
 		UnhookEvent("round_start", Event_OnRoundStart);
 		UnhookEvent("round_end", Event_OnRoundEnd);
-		UnhookEvent("item_pickup", Event_OnItemPickup);
 		
 		// unprotect the cvars
 		for(new i=0;i<sizeof(protected_cvars);i++)
@@ -1452,7 +1431,6 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		HookEvent("player_death", Event_OnPlayerDeath);
 		HookEvent("round_start", Event_OnRoundStart);
 		HookEvent("round_end", Event_OnRoundEnd);
-		HookEvent("item_pickup", Event_OnItemPickup);
 		
 		// set bad server cvars
 		for(new i=0;i<sizeof(protected_cvars);i++)
@@ -1505,6 +1483,7 @@ public ClientConVar(QueryCookie:cookie, client, ConVarQueryResult:result, const 
 		if(!match)
 		{
 			g_ConVarViolation[client][i] = true;
+			// only spam the message every 5 checks
 			if(g_ConVarMessage[client][i] == 0)
 			{
 				PrintToChat(client, "%s%t\x04 %s 0", PREFIX, "Print to console", cvarName);
