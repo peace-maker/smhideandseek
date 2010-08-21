@@ -44,8 +44,11 @@ new Handle:kv;
 
 // offsets
 new g_Render;
+new g_Radar;
 
 new bool:g_InThirdPersonView[MAXPLAYERS+1] = {false,...};
+new Handle:g_RoundTimeTimer = INVALID_HANDLE;
+new Handle:g_roundTime = INVALID_HANDLE;
 
 new g_FirstCTSpawn = 0;
 new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
@@ -53,9 +56,9 @@ new Handle:g_SpamCommandsTimer = INVALID_HANDLE;
 
 // Cheat cVar part
 new Handle:g_CheckVarTimer[MAXPLAYERS+1] = {INVALID_HANDLE,...};
-new String:cheat_commands[][] = {"cl_radaralpha", "overview_preferred_mode"};
-new bool:g_ConVarViolation[MAXPLAYERS+1][2]; // 2 = amount of cheat_commands. update if you add one.
-new g_ConVarMessage[MAXPLAYERS+1][2]; // 2 = amount of cheat_commands. update if you add one.
+new String:cheat_commands[][] = {"overview_preferred_mode"};
+new bool:g_ConVarViolation[MAXPLAYERS+1][1]; // 1 = amount of cheat_commands. update if you add one.
+new g_ConVarMessage[MAXPLAYERS+1][1]; // 1 = amount of cheat_commands. update if you add one.
 new Handle:g_CheatPunishTimer[MAXPLAYERS+1] = {INVALID_HANDLE};
 
 // Terrorist Modelchange stuff
@@ -133,7 +136,7 @@ public OnPluginStart()
 	hns_cfg_hidersspeed  = 		CreateConVar("sm_hns_hidersspeed", "1.00", "Hiders speed (Default: 1.00).", FCVAR_PLUGIN, true, 0.00, true, 3.00);
 	hns_cfg_disable_rightknife =CreateConVar("sm_hns_disable_rightknife", "1", "Disable rightclick for CTs with knife? Prevents knifing without losing heatlh. (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "0", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
-	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_EnableHnS = GetConVarBool(hns_cfg_enable);
 	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
@@ -195,14 +198,21 @@ public OnPluginStart()
 		g_SpamCommandsTimer = CreateTimer(120.0, SpamCommands, 0);
 	}
 	
-	// hook forcecamera
-	g_forceCamera = FindConVar("mp_forcecamera");
+	// hook cvars
+	g_forceCamera =  FindConVar("mp_forcecamera");
+	g_roundTime =  FindConVar("mp_roundtime");
 	
 	// get the offsets
 	// for transparency
-	g_Render = 			FindSendPropOffs("CAI_BaseNPC", "m_clrRender");
+	g_Render = FindSendPropOffs("CAI_BaseNPC", "m_clrRender");
 	if(g_Render == -1)
 		SetFailState("Couldnt find the m_clrRender offset!");
+	
+	// for hiding players on radar
+	g_Radar = FindSendPropOffs("CCSPlayerResource", "m_bPlayerSpotted");
+	if(g_Radar == -1)
+		SetFailState("Couldnt find the m_bPlayerSpotted offset!");
+	
 	
 	AutoExecConfig(true, "plugin.hide_and_seek");
 }
@@ -260,6 +270,11 @@ public OnMapStart()
 			DispatchSpawn(ent);
 		}
 	}
+	
+	// Hide players from being shown on the radar.
+	// Thanks to javalia @ alliedmods.net
+	new PMIndex = FindEntityByClassname(0, "cs_player_manager");
+	SDKHook(PMIndex, SDKHook_ThinkPost, OnThinkPost);
 }
 
 public OnMapEnd()
@@ -361,7 +376,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 	return Plugin_Continue;
 }
 
-// SDKHook Callback
+// SDKHook Callbacks
 public Action:OnWeaponCanUse(client, weapon)
 {
 	// Allow only CTs to use a weapon
@@ -370,6 +385,17 @@ public Action:OnWeaponCanUse(client, weapon)
 		return Plugin_Handled;
 	}
 	return Plugin_Continue;
+}
+
+// hide players on radar
+public OnThinkPost(entity)
+{	
+	if(g_EnableHnS)
+	{
+		for(new target = 1; target < MaxClients; target++){
+			SetEntData(entity, g_Radar + target, false, 4, true);
+		}
+	}
 }
 
 
@@ -516,6 +542,11 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 			}
 		}
 	}
+	
+	// show the roundtime in env_hudhint entity
+	new realRoundTime = RoundToNearest(GetConVarFloat(g_roundTime)*60.0);
+	// 0.9 because of caluclation lags, that would get the time behind the real round time
+	g_RoundTimeTimer = CreateTimer(0.9, ShowRoundTime, realRoundTime, TIMER_FLAG_NO_MAPCHANGE);
 }
 // give terrorists frags
 public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroadcast)
@@ -526,6 +557,12 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 	{
 		KillTimer(g_ShowCountdownTimer);
 		g_ShowCountdownTimer = INVALID_HANDLE;
+	}
+	
+	if(g_RoundTimeTimer != INVALID_HANDLE)
+	{
+		KillTimer(g_RoundTimeTimer);
+		g_RoundTimeTimer = INVALID_HANDLE;
 	}
 	
 	new winnerTeam = GetEventInt(event, "winner");
@@ -767,6 +804,34 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 	return Plugin_Handled;
 }
 
+public Action:ShowRoundTime(Handle:timer, any:seconds)
+{
+	decl String:timeLeft[10];
+	new minutes = RoundToFloor(float(seconds) / 60.0);
+	new secs = seconds - minutes*60;
+	if(secs < 10)
+		Format(timeLeft, sizeof(timeLeft), "%d:0%d", minutes, secs);
+	else
+		Format(timeLeft, sizeof(timeLeft), "%d:%d", minutes, secs);
+	for(new i=1;i<MaxClients;i++)
+	{
+		if(IsClientInGame(i) && g_InThirdPersonView[i])
+		{
+			new Handle:hBuffer = StartMessageOne("KeyHintText", i);
+			BfWriteByte(hBuffer, 1);
+			BfWriteString(hBuffer, timeLeft);
+			EndMessage();
+		}
+	}
+	seconds--;
+	if(seconds > 0)
+		g_RoundTimeTimer = CreateTimer(0.9, ShowRoundTime, seconds, TIMER_FLAG_NO_MAPCHANGE);
+	else
+		g_RoundTimeTimer = INVALID_HANDLE;
+	
+	return Plugin_Handled;
+}
+
 /*
 * 
 * Console Command Handling
@@ -832,6 +897,12 @@ public Action:Third_Person(client, args)
 		SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 1);
 		SetEntProp(client, Prop_Send, "m_iFOV", 90);
 		g_InThirdPersonView[client] = false;
+		
+		// remove the roundtime message
+		new Handle:hBuffer = StartMessageOne("KeyHintText", client);
+		BfWriteByte(hBuffer, 1);
+		BfWriteString(hBuffer, "");
+		EndMessage();
 	}
 	
 	return Plugin_Handled;
@@ -1360,6 +1431,10 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		UnhookEvent("round_start", Event_OnRoundStart);
 		UnhookEvent("round_end", Event_OnRoundEnd);
 		
+		// unhook radar
+		new PMIndex = FindEntityByClassname(0, "cs_player_manager");
+		SDKUnhook(PMIndex, SDKHook_ThinkPost, OnThinkPost);
+		
 		// unprotect the cvars
 		for(new i=0;i<sizeof(protected_cvars);i++)
 		{
@@ -1380,6 +1455,13 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		{
 			KillTimer(g_ShowCountdownTimer);
 			g_ShowCountdownTimer = INVALID_HANDLE;
+		}
+		
+		// stop roundtime counter
+		if(g_RoundTimeTimer != INVALID_HANDLE)
+		{
+			KillTimer(g_RoundTimeTimer);
+			g_RoundTimeTimer = INVALID_HANDLE;
 		}
 		
 		// close handles
