@@ -29,6 +29,7 @@ new Handle:hns_cfg_anticheat = INVALID_HANDLE;
 new Handle:hns_cfg_cheat_punishment = INVALID_HANDLE;
 #endif
 new Handle:hns_cfg_hider_win_frags = INVALID_HANDLE;
+new Handle:hns_cfg_slay_seekers = INVALID_HANDLE;
 new Handle:hns_cfg_hp_seeker_enable = INVALID_HANDLE;
 new Handle:hns_cfg_hp_seeker_dec = INVALID_HANDLE;
 new Handle:hns_cfg_hp_seeker_inc = INVALID_HANDLE;
@@ -137,12 +138,13 @@ public OnPluginStart()
 	hns_cfg_cheat_punishment = 	CreateConVar("sm_hns_cheat_punishment", "1", "How to punish players with wrong cvar values after 15 seconds? 0: Disabled. 1: Switch to Spectator. 2: Kick", FCVAR_PLUGIN, true, 0.00, true, 2.00);
 #endif
 	hns_cfg_hider_win_frags = 	CreateConVar("sm_hns_hider_win_frags", "5", "How many frags should surviving terrorists gain?", FCVAR_PLUGIN, true, 0.00, true, 10.00);
+	hns_cfg_slay_seekers = 		CreateConVar("sm_hns_slay_seekers", "0", "Should we slay all seekers on round end and there are still some hiders alive? (Default: 0)", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_hp_seeker_enable = 	CreateConVar("sm_hns_hp_seeker_enable", "1", "Should CT lose HP when shooting, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_hp_seeker_dec = 	CreateConVar("sm_hns_hp_seeker_dec", "5", "How many hp should a CT lose on shooting?", FCVAR_PLUGIN, true, 0.00);
 	hns_cfg_hp_seeker_inc = 	CreateConVar("sm_hns_hp_seeker_inc", "15", "How many hp should a CT gain when hitting a hider?", FCVAR_PLUGIN, true, 0.00);
 	hns_cfg_hp_seeker_bonus = 	CreateConVar("sm_hns_hp_seeker_bonus", "50", "How many hp should a CT gain when killing a hider?", FCVAR_PLUGIN, true, 0.00);
 	hns_cfg_opacity_enable = 	CreateConVar("sm_hns_opacity_enable", "0", "Should T get more invisible on low hp, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
-	hns_cfg_hidersspeed  = 		CreateConVar("sm_hns_hidersspeed", "1.00", "Hiders speed (Default: 1.00).", FCVAR_PLUGIN, true, 0.00, true, 3.00);
+	hns_cfg_hidersspeed  = 		CreateConVar("sm_hns_hidersspeed", "1.00", "Hiders speed (Default: 1.00).", FCVAR_PLUGIN, true, 1.00, true, 3.00);
 	hns_cfg_disable_rightknife =CreateConVar("sm_hns_disable_rightknife", "1", "Disable rightclick for CTs with knife? Prevents knifing without losing heatlh. (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "0", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
@@ -185,6 +187,7 @@ public OnPluginStart()
 #endif
 	
 	RegAdminCmd("sm_hns_force_whistle", ForceWhistle, ADMFLAG_CHAT, "Force a player to whistle");
+	RegAdminCmd("sm_hns_reload_models", ReloadModels, ADMFLAG_RCON, "Reload the modellist from the map config file.");
 		
 	// Loading translations
 	LoadTranslations("plugin.hide_and_seek");
@@ -222,7 +225,7 @@ public OnPluginStart()
 	// for transparency
 	g_Render = FindSendPropOffs("CAI_BaseNPC", "m_clrRender");
 	if(g_Render == -1)
-		SetFailState("Couldnt find the m_clrRender offset!");
+		SetFailState("Couldnt find the m_clrRender offset!");	
 	
 	// for hiding players on radar
 	g_Radar = FindSendPropOffs("CCSPlayerResource", "m_bPlayerSpotted");
@@ -322,6 +325,7 @@ public OnClientPutInServer(client)
 	
 	// Hook weapon pickup
 	SDKHook(client, SDKHook_WeaponCanUse, OnWeaponCanUse);
+	SDKHook(client, SDKHook_PreThink, OnPreThink);
 }
 
 public OnClientDisconnect(client)
@@ -409,6 +413,15 @@ public Action:OnWeaponCanUse(client, weapon)
 	return Plugin_Continue;
 }
 
+public OnPreThink(client)
+{	
+	if(g_EnableHnS)
+	{
+		// hide the radar
+		SetEntProp(client, Prop_Send, "m_iHideHUD", (1<<4));
+	}
+}
+
 // hide players on radar
 public OnThinkPost(entity)
 {	
@@ -460,24 +473,31 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			SetEntityRenderMode(client, RENDER_TRANSTEXTURE);
 		}
 		
+		new Float:changeLimitTime = GetConVarFloat(hns_cfg_changelimittime);
+		
 		// Assign a model to bots immediately and disable all menus or timers.
 		if(IsFakeClient(client))
 			g_AllowModelChangeTimer[client] = CreateTimer(0.1, DisableModelMenu, client);
 		else
 		{
-			g_AllowModelChangeTimer[client] = CreateTimer(GetConVarFloat(hns_cfg_changelimittime), DisableModelMenu, client);
+			// only disable the menu, if it's not unlimited
+			if(changeLimitTime > 0.0)
+				g_AllowModelChangeTimer[client] = CreateTimer(changeLimitTime, DisableModelMenu, client);
+			
 			// Set them to thirdperson automatically
 			if(GetConVarBool(hns_cfg_auto_thirdperson))
 				Third_Person(client, 2);
+			
+			if(GetConVarBool(hns_cfg_autochoose))
+				SetRandomModel(client);
+			else if(changeLimitTime > 0.0)
+				DisplayMenu(g_ModelMenu[GetClientLanguageID(client)], client, RoundToFloor(changeLimitTime));
+			else
+				DisplayMenu(g_ModelMenu[GetClientLanguageID(client)], client, MENU_TIME_FOREVER);
 		}
 		
 		g_WhistleCount[client] = 0;
-		
-		if(GetConVarBool(hns_cfg_autochoose))
-			SetRandomModel(client);
-		else
-			DisplayMenu(g_ModelMenu[GetClientLanguageID(client)], client, RoundToFloor(GetConVarFloat(hns_cfg_changelimittime)));
-		
+
 		if(GetConVarBool(hns_cfg_freezects))
 			PrintToChat(client, "%s%t", PREFIX, "seconds to hide", RoundToFloor(GetConVarFloat(hns_cfg_freezetime)));
 		else
@@ -567,7 +587,7 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 	
 	// show the roundtime in env_hudhint entity
 	new realRoundTime = RoundToNearest(GetConVarFloat(g_roundTime)*60.0);
-	g_RoundTimeTimer = CreateTimer(0.9, ShowRoundTime, realRoundTime, TIMER_FLAG_NO_MAPCHANGE);
+	g_RoundTimeTimer = CreateTimer(1.0, ShowRoundTime, realRoundTime, TIMER_FLAG_NO_MAPCHANGE);
 }
 // give terrorists frags
 public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroadcast)
@@ -604,11 +624,28 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 				// increase kills by x
 				SetEntProp(i, Prop_Data, "m_iFrags", GetClientFrags(i) + increaseFrags);
 				aliveTerrorists = true;
+				
+				// set godmode for the rest of the round
+				SetEntProp(i, Prop_Data, "m_takedamage", 0, 1);
 			}
 		}
 		
 		if(aliveTerrorists)
+		{
 			PrintToChatAll("%s%t", PREFIX, "got frags", increaseFrags);
+		}
+		
+		if(GetConVarBool(hns_cfg_slay_seekers))
+		{
+			// slay all seekers
+			for(new i=1;i<MaxClients;i++)
+			{
+				if(IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == 3)
+				{
+					ForcePlayerSuicide(i);
+				}
+			}
+		}
 	}
 	return Plugin_Continue;
 }
@@ -683,8 +720,13 @@ public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBr
 // Freeze player function
 public Action:FreezePlayer(Handle:timer, any:client)
 {
+	if(!IsClientInGame(client) || !IsPlayerAlive(client))
+		return Plugin_Handled;
+	
 	SetEntityMoveType(client, MOVETYPE_NONE);
 	PerformBlind(client, 255);
+	
+	return Plugin_Handled;
 }
 
 // Unfreeze player function
@@ -853,7 +895,7 @@ public Action:ShowRoundTime(Handle:timer, any:seconds)
 	}
 	seconds--;
 	if(seconds > 0)
-		g_RoundTimeTimer = CreateTimer(0.9, ShowRoundTime, seconds, TIMER_FLAG_NO_MAPCHANGE);
+		g_RoundTimeTimer = CreateTimer(1.0, ShowRoundTime, seconds, TIMER_FLAG_NO_MAPCHANGE);
 	else
 		g_RoundTimeTimer = INVALID_HANDLE;
 	
@@ -1133,6 +1175,25 @@ public Action:ForceWhistle(client, args)
 	return Plugin_Handled;
 }
 
+public Action:ReloadModels(client, args)
+{
+	if(!g_EnableHnS)
+	{
+		ReplyToCommand(client, "Disabled.");
+		return Plugin_Handled;
+	}
+	
+	// reset the model menu
+	OnMapEnd();
+	
+	// rebuild it
+	BuildMainMenu();
+	
+	ReplyToCommand(client, "Hide and Seek: Reloaded config.");
+	
+	return Plugin_Handled;
+}
+
 
 /*
 * 
@@ -1355,7 +1416,7 @@ SetRandomModel(client)
 {
 	// give him a random one.
 	decl String:ModelPath[80], String:finalPath[100], String:ModelName[60], String:langCode[4];
-	new RandomNumber = GetRandomInt(0, g_TotalModelsAvailable);	
+	new RandomNumber = GetRandomInt(0, g_TotalModelsAvailable-1);	
 	new currentI = 0;
 	KvGotoFirstSubKey(kv);
 	do
@@ -1368,10 +1429,13 @@ SetRandomModel(client)
 			FormatEx(finalPath, sizeof(finalPath), "models/%s.mdl", ModelPath);
 			SetEntityModel(client, finalPath);
 			
-			// print name in chat
-			GetClientLanguageID(client, langCode, sizeof(langCode));
-			KvGetString(kv, langCode, ModelName, sizeof(ModelName));
-			PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", ModelName);
+			if(!IsFakeClient(client))
+			{
+				// print name in chat
+				GetClientLanguageID(client, langCode, sizeof(langCode));
+				KvGetString(kv, langCode, ModelName, sizeof(ModelName));
+				PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", ModelName);
+			}
 		}
 		currentI++;
 	} while (KvGotoNextKey(kv));
@@ -1465,7 +1529,7 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		UnhookEvent("weapon_fire", Event_OnWeaponFire);
 		UnhookEvent("player_death", Event_OnPlayerDeath);
 		UnhookEvent("round_start", Event_OnRoundStart);
-		UnhookEvent("round_end", Event_OnRoundEnd);
+		UnhookEvent("round_end", Event_OnRoundEnd);		
 		
 		// unhook radar
 		new PMIndex = FindEntityByClassname(0, "cs_player_manager");
