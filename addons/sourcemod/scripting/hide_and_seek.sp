@@ -51,6 +51,7 @@ new Handle:kv;
 // offsets
 new g_Render;
 new g_Radar;
+new g_PlayerManager;
 
 new bool:g_InThirdPersonView[MAXPLAYERS+1] = {false,...};
 new Handle:g_RoundTimeTimer = INVALID_HANDLE;
@@ -289,11 +290,6 @@ public OnMapStart()
 			DispatchSpawn(ent);
 		}
 	}
-	
-	// Hide players from being shown on the radar.
-	// Thanks to javalia @ alliedmods.net
-	new PMIndex = FindEntityByClassname(0, "cs_player_manager");
-	SDKHook(PMIndex, SDKHook_ThinkPost, OnThinkPost);
 }
 
 public OnMapEnd()
@@ -311,6 +307,7 @@ public OnMapEnd()
 		}
 		Format(g_ModelMenuLanguage[i], 4, "");
 	}
+
 }
 
 public OnClientPutInServer(client)
@@ -375,33 +372,6 @@ public OnClientDisconnect(client)
 	}*/
 }
 
-// prevent players from ducking
-public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon)
-{
-	if(!g_EnableHnS)
-		return Plugin_Continue;
-	
-	decl String:weaponName[30];
-	// don't allow ct's to shoot in the beginning of the round
-	new team = GetClientTeam(client);
-	GetClientWeapon(client, weaponName, sizeof(weaponName));
-	if(team == 3 && g_IsCTWaiting[client] && (buttons & IN_ATTACK || buttons & IN_ATTACK2))
-	{
-		buttons &= ~IN_ATTACK;
-		buttons &= ~IN_ATTACK2;
-	} // disable rightclick knifing for cts
-	else if(team == 3 && GetConVarBool(hns_cfg_disable_rightknife) && buttons & IN_ATTACK2 && !strcmp(weaponName, "weapon_knife"))
-	{
-		buttons &= ~IN_ATTACK2;
-	}
-	
-	// disable ducking for everyone
-	if(buttons & IN_DUCK && GetConVarBool(hns_cfg_disable_ducking))
-		buttons &= ~IN_DUCK;
-	
-	return Plugin_Continue;
-}
-
 // SDKHook Callbacks
 public Action:OnWeaponCanUse(client, weapon)
 {
@@ -417,22 +387,34 @@ public OnPreThink(client)
 {	
 	if(g_EnableHnS)
 	{
-		// hide the radar
-		SetEntProp(client, Prop_Send, "m_iHideHUD", (1<<4));
-	}
-}
-
-// hide players on radar
-public OnThinkPost(entity)
-{	
-	if(g_EnableHnS)
-	{
-		for(new target = 1; target < MaxClients; target++){
-			SetEntData(entity, g_Radar + target, false, 4, true);
+		new buttons = GetClientButtons(client);
+		decl String:weaponName[30];
+		// don't allow ct's to shoot in the beginning of the round
+		new team = GetClientTeam(client);
+		GetClientWeapon(client, weaponName, sizeof(weaponName));
+		if(team == 3 && g_IsCTWaiting[client] && (buttons & IN_ATTACK || buttons & IN_ATTACK2))
+		{
+			buttons &= ~IN_ATTACK;
+			buttons &= ~IN_ATTACK2;
+		} // disable rightclick knifing for cts
+		else if(team == 3 && GetConVarBool(hns_cfg_disable_rightknife) && buttons & IN_ATTACK2 && !strcmp(weaponName, "weapon_knife"))
+		{
+			buttons &= ~IN_ATTACK2;
+		}
+		
+		// disable ducking for everyone
+		if(buttons & IN_DUCK && GetConVarBool(hns_cfg_disable_ducking))
+			buttons &= ~IN_DUCK;
+		
+		SetEntProp(client, Prop_Data, "m_nButtons", buttons);
+		
+		// hide players on radar
+		//SetEntProp(client, Prop_Send, "m_iHideHUD", (1<<4));
+		for(new target = 1; target < 65; target++){
+			SetEntData(g_PlayerManager, g_Radar + target, 0, 4, true);
 		}
 	}
 }
-
 
 /*
 * 
@@ -585,6 +567,11 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 		}
 	}
 	
+	// Hide players from being shown on the radar.
+	// Thanks to javalia @ alliedmods.net
+	// more in PlayerPreThink hook
+	g_PlayerManager = FindEntityByClassname(0, "cs_player_manager");
+	
 	// show the roundtime in env_hudhint entity
 	new realRoundTime = RoundToNearest(GetConVarFloat(g_roundTime)*60.0);
 	g_RoundTimeTimer = CreateTimer(1.0, ShowRoundTime, realRoundTime, TIMER_FLAG_NO_MAPCHANGE);
@@ -647,6 +634,7 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 			}
 		}
 	}
+	
 	return Plugin_Continue;
 }
 
@@ -1530,10 +1518,6 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		UnhookEvent("player_death", Event_OnPlayerDeath);
 		UnhookEvent("round_start", Event_OnRoundStart);
 		UnhookEvent("round_end", Event_OnRoundEnd);		
-		
-		// unhook radar
-		new PMIndex = FindEntityByClassname(0, "cs_player_manager");
-		SDKUnhook(PMIndex, SDKHook_ThinkPost, OnThinkPost);
 		
 		// unprotect the cvars
 		for(new i=0;i<sizeof(protected_cvars);i++)
