@@ -5,7 +5,7 @@
 
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "1.3"
+#define PLUGIN_VERSION "1.3.0"
 
 // uncomment, if you need to force some cvars on clients
 //#define ENABLE_ANTICHEAT
@@ -60,6 +60,7 @@ new Handle:g_roundTime = INVALID_HANDLE;
 new g_FirstCTSpawn = 0;
 new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
 new Handle:g_SpamCommandsTimer = INVALID_HANDLE;
+new bool:g_RoundEnded = false;
 
 #if defined ANTI_CHEAT
 // Cheat cVar part
@@ -533,7 +534,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 // subtract 5hp for every shot a seeker is giving
 public Action:Event_OnWeaponFire(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	if(!GetConVarBool(hns_cfg_hp_seeker_enable))
+	if(!GetConVarBool(hns_cfg_hp_seeker_enable) || !g_RoundEnded)
 		return;
 	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
@@ -553,6 +554,8 @@ public Action:Event_OnWeaponFire(Handle:event, const String:name[], bool:dontBro
 
 public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	g_RoundEnded = false;
+	
 	// remove bombzones and hostages so no normal gameplay could end the round
 	new maxent = GetMaxEntities(), String:eName[64];
 	for (new i=MaxClients;i<maxent;i++)
@@ -569,7 +572,7 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 	
 	// Hide players from being shown on the radar.
 	// Thanks to javalia @ alliedmods.net
-	// more in PlayerPreThink hook
+	// more in OnPreThink hook
 	g_PlayerManager = FindEntityByClassname(0, "cs_player_manager");
 	
 	// show the roundtime in env_hudhint entity
@@ -579,6 +582,9 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 // give terrorists frags
 public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	// round has ended. used to not decrease seekers hp on shoot
+	g_RoundEnded = true;
+	
 	g_FirstCTSpawn = 0;
 	
 	if(g_ShowCountdownTimer != INVALID_HANDLE)
