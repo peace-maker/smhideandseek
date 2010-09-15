@@ -534,7 +534,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 // subtract 5hp for every shot a seeker is giving
 public Action:Event_OnWeaponFire(Handle:event, const String:name[], bool:dontBroadcast)
 {
-	if(!GetConVarBool(hns_cfg_hp_seeker_enable) || !g_RoundEnded)
+	if(!GetConVarBool(hns_cfg_hp_seeker_enable) || g_RoundEnded)
 		return;
 	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
