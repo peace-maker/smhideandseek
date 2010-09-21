@@ -61,6 +61,7 @@ new g_FirstCTSpawn = 0;
 new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
 new Handle:g_SpamCommandsTimer = INVALID_HANDLE;
 new bool:g_RoundEnded = false;
+new bool:g_FirstSpawn[MAXPLAYERS+1] = {true,...};
 
 #if defined ANTI_CHEAT
 // Cheat cVar part
@@ -173,16 +174,16 @@ public OnPluginStart()
 		HookEvent("round_end", Event_OnRoundEnd);
 	}
 	
-	
 	// Register console commands
-	RegConsoleCmd("hide", Menu_SelectModel);
-	RegConsoleCmd("hidemenu", Menu_SelectModel);
-	RegConsoleCmd("tp", Third_Person);
-	RegConsoleCmd("thirdperson", Third_Person);
-	RegConsoleCmd("third", Third_Person);
+	RegConsoleCmd("hide", Menu_SelectModel, "Opens a menu with different models to choose as hider.");
+	RegConsoleCmd("hidemenu", Menu_SelectModel, "Opens a menu with different models to choose as hider.");
+	RegConsoleCmd("tp", Third_Person, "Switches the view to thirdperson for hiders.");
+	RegConsoleCmd("thirdperson", Third_Person, "Switches the view to thirdperson for hiders.");
+	RegConsoleCmd("third", Third_Person, "Switches the view to thirdperson for hiders.");
 	RegConsoleCmd("jointeam", Command_JoinTeam);
-	RegConsoleCmd("whistle", Play_Whistle);
-	RegConsoleCmd("whoami", Display_ModelName);
+	RegConsoleCmd("whistle", Play_Whistle, "Plays a random sound from the hiders position to give the seekers a hint.");
+	RegConsoleCmd("whoami", Display_ModelName, "Displays the current models description in chat.");
+	RegConsoleCmd("hidehelp", Display_Help, "Displays a panel with informations how to play.");
 	
 #if defined ANTI_CHEAT
 	RegConsoleCmd("overview_mode", Block_Cmd);
@@ -236,6 +237,12 @@ public OnPluginStart()
 	
 	
 	AutoExecConfig(true, "plugin.hide_and_seek");
+}
+
+public OnPluginEnd()
+{
+	if(g_EnableHnS)
+		ServerCommand("mp_restartgame 1");
 }
 
 /*
@@ -365,6 +372,7 @@ public OnClientDisconnect(client)
 		}
 	}
 	g_AllowModelChange[client] = true;
+	g_FirstSpawn[client] = true;
 	
 	/*if (g_CheckVarTimer[client] != INVALID_HANDLE)
 	{
@@ -525,6 +533,13 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			
 			PrintToChat(client, "%s%t", PREFIX, "Wait for t to hide", RoundToFloor(freezeTime-float(currentTime - g_FirstCTSpawn)));
 			g_IsCTWaiting[client] = true;
+		}
+		
+		// show help menu on first spawn
+		if(g_FirstSpawn[client])
+		{
+			Display_Help(client, 0);
+			g_FirstSpawn[client] = false;
 		}
 	}
 	
@@ -1123,6 +1138,39 @@ public Action:Display_ModelName(client,args)
 	return Plugin_Handled;
 }
 
+public Action:Display_Help(client,args)
+{
+	if(!g_EnableHnS)
+		return Plugin_Handled;
+	
+	new Handle:menu = CreateMenu(Menu_Help);
+	
+	decl String:buffer[512];
+	Format(buffer, sizeof(buffer), "%T", "HnS Help", client);
+	SetMenuTitle(menu, buffer);
+	SetMenuExitButton(menu, true);
+	
+	Format(buffer, sizeof(buffer), "%T", "Running HnS", client);
+	AddMenuItem(menu, "", buffer, ITEMDRAW_DISABLED);
+	
+	Format(buffer, sizeof(buffer), "%T", "Instructions 1", client);
+	AddMenuItem(menu, "", buffer, ITEMDRAW_DISABLED);
+	
+	AddMenuItem(menu, "", "", ITEMDRAW_SPACER);
+	
+	Format(buffer, sizeof(buffer), "%T", "Available Commands", client);
+	AddMenuItem(menu, "1", buffer);
+	
+	Format(buffer, sizeof(buffer), "%T", "Howto CT", client);
+	AddMenuItem(menu, "2", buffer);
+	
+	Format(buffer, sizeof(buffer), "%T", "Howto T", client);
+	AddMenuItem(menu, "3", buffer);
+	
+	DisplayMenu(menu, client, MENU_TIME_FOREVER);
+	return Plugin_Handled;
+}
+
 #if defined ANTI_CHEAT
 public Action:Block_Cmd(client,args)
 {
@@ -1213,6 +1261,105 @@ public Menu_Group(Handle:menu, MenuAction:action, client, param2)
 		{
 			PrintToChat(client, "%s%t", PREFIX, "Type !hide");
 		}
+		
+		// display the help menu afterwards on first spawn
+		if(g_FirstSpawn[client])
+		{
+			Display_Help(client, 0);
+			g_FirstSpawn[client] = false;
+		}
+	}
+}
+
+// Display the different help menus
+public Menu_Help(Handle:menu, MenuAction:action, param1, param2)
+{
+	if (action == MenuAction_Select)
+	{
+		new String:info[32];
+		GetMenuItem(menu, param2, info, sizeof(info));
+		new iInfo = StringToInt(info);
+		switch(iInfo)
+		{
+			case 1:
+			{
+				// Available Commands
+				new Handle:menu2 = CreateMenu(Menu_Dummy);
+				decl String:buffer[512];
+				Format(buffer, sizeof(buffer), "%T", "Available Commands", param1);
+				SetMenuTitle(menu2, buffer);
+				SetMenuExitBackButton(menu2, true);
+				
+				Format(buffer, sizeof(buffer), "/hide, /hidemenu - %T", "cmd hide", param1);
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				Format(buffer, sizeof(buffer), "/tp, /third, /thirdperson - %T", "cmd tp", param1);
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				Format(buffer, sizeof(buffer), "/whistle - %T", "cmd whistle", param1);
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				Format(buffer, sizeof(buffer), "/whoami - %T", "cmd whoami", param1);
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				Format(buffer, sizeof(buffer), "/hidehelp - %T", "cmd hidehelp", param1);
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				
+				DisplayMenu(menu2, param1, MENU_TIME_FOREVER);
+			}
+			case 2:
+			{
+				// Howto CT
+				new Handle:menu2 = CreateMenu(Menu_Dummy);
+				decl String:buffer[512];
+				Format(buffer, sizeof(buffer), "%T", "Howto CT", param1);
+				SetMenuTitle(menu2, buffer);
+				SetMenuExitBackButton(menu2, true);
+				
+				Format(buffer, sizeof(buffer), "%T", "Instructions CT 1", param1);
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				
+				AddMenuItem(menu2, "", "", ITEMDRAW_SPACER);
+				
+				Format(buffer, sizeof(buffer), "%T", "Instructions CT 2", param1, GetConVarInt(hns_cfg_hp_seeker_dec));
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				
+				Format(buffer, sizeof(buffer), "%T", "Instructions CT 3", param1, GetConVarInt(hns_cfg_hp_seeker_inc), GetConVarInt(hns_cfg_hp_seeker_bonus));
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				
+				DisplayMenu(menu2, param1, MENU_TIME_FOREVER);
+			}
+			case 3:
+			{
+				// Howto T
+				new Handle:menu2 = CreateMenu(Menu_Dummy);
+				decl String:buffer[512];
+				Format(buffer, sizeof(buffer), "%T", "Howto T", param1);
+				SetMenuTitle(menu2, buffer);
+				SetMenuExitBackButton(menu2, true);
+				
+				Format(buffer, sizeof(buffer), "%T", "Instructions T 1", param1);
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				
+				Format(buffer, sizeof(buffer), "%T", "Instructions T 2", param1);
+				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				
+				DisplayMenu(menu2, param1, MENU_TIME_FOREVER);
+			}
+		}
+	}
+	else if (action == MenuAction_End)
+	{
+		CloseHandle(menu);
+	}
+}
+
+public Menu_Dummy(Handle:menu, MenuAction:action, param1, param2)
+{
+	if (action == MenuAction_Cancel && param2 != MenuCancel_Exit)
+	{
+		if(IsClientInGame(param1))
+			Display_Help(param1, 0);
+	}
+	else if (action == MenuAction_End)
+	{
+		CloseHandle(menu);
 	}
 }
 
@@ -1436,6 +1583,13 @@ SetRandomModel(client)
 	
 	KvRewind(kv);	
 	g_ModelChangeCount[client]++;
+	
+	// display the help menu afterwards on first spawn
+	if(g_FirstSpawn[client])
+	{
+		Display_Help(client, 0);
+		g_FirstSpawn[client] = false;
+	}
 }
 
 /*

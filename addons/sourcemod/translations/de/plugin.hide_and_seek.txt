@@ -1,4 +1,4 @@
-"Phrases"
+﻿"Phrases"
 {
 	
 	"Title Select Model"
@@ -109,5 +109,86 @@
 	"got frags"
 	{
 		"en"			"Alle überlebenden Verstecker haben {1} Punkte bekommen. Gut gemacht!"
+	}
+
+
+	"HnS Help"
+	{
+		"en"			"Hide and Seek: Hilfe"
+	}
+
+	"Running HnS"
+	{
+		"en"			"Auf diesem Server läuft Hide and Seek."
+	}
+
+	"Instructions 1"
+	{
+		"en"			"Terroristen suchen sich ein Model aus und verstecken sich, CTs suchen und töten sie."
+	}
+
+	"Available Commands"
+	{
+		"en"			"Verfügbare Chatbefehle"
+	}
+
+	"Howto CT"
+	{
+		"en"			"Wie spiele ich als Sucher?"
+	}
+
+	"Instructions CT 1"
+	{
+		"en"			"Sucher müssen die Verstecker finden, wobei diese alles seien können - von einem Ölfass bis zu einer Zimmerpflanze, und töten."
+	}
+
+	"Instructions CT 2"
+	{
+		"en"			"Sei vorsichtig beim Schießen! Du verlierst {1} HP pro Schuss."
+	}
+
+	"Instructions CT 3"
+	{
+		"en"			"Du erhälst {1} HP, wenn du einen Verstecker verletzt, und {2} HP, wenn du ihn tötest. Schau immer wieder mal hinter dich!"
+	}
+
+	"Howto T"
+	{
+		"en"			"Wie spiele ich als Verstecker?"
+	}
+
+	"Instructions T 1"
+	{
+		"en"			"Verstecker wählen ein Model aus, welches oft auf dieser Map vorkommt, und suchen sich einen Platz, wo sie nicht auffallen."
+	}
+
+	"Instructions T 2"
+	{
+		"en"			"Bleib in Bewegung, um den Suchern eine Chance zu geben und die Spannung zu erhöhen!"
+	}
+
+	"cmd hide"
+	{
+		"en"			"Zeigt das Modelauswahl Menü."
+	}
+
+	"cmd tp"
+	{
+		"en"			"Schaltet die Perpektive in die dritte Person und zurück."
+	}
+
+	"cmd whistle"
+	{
+		"en"			"Spielt einen Ton von der Position des Versteckers ab, um den Suchern einen Hinweis zu geben."
+	}
+
+	"cmd whoami"
+	{
+		"en"			"Schreibt den Namen des derzeitigen Models in den Chat."
+	}
+
+	"cmd hidehelp"
+	{
+		"en"			"Zeigt dieses Hilfemenü."
 	}
 }

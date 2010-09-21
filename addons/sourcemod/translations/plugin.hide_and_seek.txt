@@ -115,4 +115,86 @@
 		"#format"		"{1:d}"
 		"en"			"All surviving hiders got {1} points. Good job!"
 	}
+
+	"HnS Help"
+	{
+		"en"			"Hide and Seek: Help"
+	}
+
+	"Running HnS"
+	{
+		"en"			"This server is running Hide and Seek."
+	}
+
+	"Instructions 1"
+	{
+		"en"			"Terrorists choose a model and hide, CTs search and kill them."
+	}
+
+	"Available Commands"
+	{
+		"en"			"Available Chat Commands"
+	}
+
+	"Howto CT"
+	{
+		"en"			"How to play as seeker?"
+	}
+
+	"Instructions CT 1"
+	{
+		"en"			"Seekers have to find the hiders, who could be everything from an oil drum to a pot plant and kill them."
+	}
+
+	"Instructions CT 2"
+	{
+		"#format"		"{1:d}"
+		"en"			"Be careful with your shootings! You may loose {1} HP per shot."
+	}
+
+	"Instructions CT 3"
+	{
+		"#format"		"{1:d},{2:d}"
+		"en"			"You gain {1} HP on hider hurt and {2} HP when killing a hider. Always keep an eye behind you!"
+	}
+
+	"Howto T"
+	{
+		"en"			"How to play as hider?"
+	}
+
+	"Instructions T 1"
+	{
+		"en"			"Hiders choose a model which is common on the current map and should search a place they blend in best."
+	}
+
+	"Instructions T 2"
+	{
+		"en"			"Keep moving to give the seekers a chance and higher the action!"
+	}
+
+	"cmd hide"
+	{
+		"en"			"Displays the model choice menu."
+	}
+
+	"cmd tp"
+	{
+		"en"			"Toggles the thirdperson view."
+	}
+
+	"cmd whistle"
+	{
+		"en"			"Play a sound from the hiders position to give the seekers a hint."
+	}
+
+	"cmd whoami"
+	{
+		"en"			"Prints the current modelname in chat."
+	}
+
+	"cmd hidehelp"
+	{
+		"en"			"Displays this help menu."
+	}
 }
