@@ -116,6 +116,16 @@
 		"en"			"All surviving hiders got {1} points. Good job!"
 	}
 
+	"Hider Freezed"
+	{
+		"en"			"You're freezed in place. Remember that you're still able to move your view!"
+	}
+
+	"Hider Unfreezed"
+	{
+		"en"			"You're able to move again."
+	}
+
 	"HnS Help"
 	{
 		"en"			"Hide and Seek: Help"

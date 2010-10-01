@@ -111,6 +111,16 @@
 		"en"			"Alle überlebenden Verstecker haben {1} Punkte bekommen. Gut gemacht!"
 	}
 
+	"Hider Freezed"
+	{
+		"en"			"Du wurdest eingefroren. Pass auf! Du kannst deine Sicht immernoch bewegen."
+	}
+
+	"Hider Unfreezed"
+	{
+		"en"			"Du kannst dich nun wieder bewegen."
+	}
+
 
 	"HnS Help"
 	{

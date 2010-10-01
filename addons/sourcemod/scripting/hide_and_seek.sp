@@ -8,7 +8,7 @@
 #define PLUGIN_VERSION "1.3.0"
 
 // uncomment, if you need to force some cvars on clients
-//#define ENABLE_ANTICHEAT
+//#define ANTI_CHEAT
 
 // that's what GetLanguageCount() got me
 #define MAX_LANGUAGES 27
@@ -39,6 +39,7 @@ new Handle:hns_cfg_hidersspeed = INVALID_HANDLE;
 new Handle:hns_cfg_disable_rightknife = INVALID_HANDLE;
 new Handle:hns_cfg_disable_ducking = INVALID_HANDLE;
 new Handle:hns_cfg_auto_thirdperson = INVALID_HANDLE;
+new Handle:hns_cfg_hider_freeze_cmd = INVALID_HANDLE;
 
 // primary enableswitch
 new bool:g_EnableHnS = true;
@@ -54,6 +55,7 @@ new g_Radar;
 new g_PlayerManager;
 
 new bool:g_InThirdPersonView[MAXPLAYERS+1] = {false,...};
+new bool:g_IsFreezed[MAXPLAYERS+1] = {false,...};
 new Handle:g_RoundTimeTimer = INVALID_HANDLE;
 new Handle:g_roundTime = INVALID_HANDLE;
 
@@ -117,7 +119,7 @@ new String:whistle_sounds[][] = {"ambient/animal/cow.wav", "ambient/animal/horse
 public Plugin:myinfo = 
 {
 	name = "Hide and Seek",
-	author = "Vladislav Dolgov and Jannik Hartung",
+	author = "Jannik 'Peace-Maker' Hartung and Vladislav Dolgov",
 	description = "Terrorists set a model and hide, CT seek terrorists.",
 	version = PLUGIN_VERSION,
 	url = "http://www.elistor.ru/ | http://www.wcfan.de/"
@@ -151,6 +153,7 @@ public OnPluginStart()
 	hns_cfg_disable_rightknife =CreateConVar("sm_hns_disable_rightknife", "1", "Disable rightclick for CTs with knife? Prevents knifing without losing heatlh. (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "0", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_hider_freeze_cmd =	CreateConVar("sm_hns_hider_freeze_cmd", "1", "Enable /freeze command for hiders. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_EnableHnS = GetConVarBool(hns_cfg_enable);
 	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
@@ -184,6 +187,7 @@ public OnPluginStart()
 	RegConsoleCmd("whistle", Play_Whistle, "Plays a random sound from the hiders position to give the seekers a hint.");
 	RegConsoleCmd("whoami", Display_ModelName, "Displays the current models description in chat.");
 	RegConsoleCmd("hidehelp", Display_Help, "Displays a panel with informations how to play.");
+	RegConsoleCmd("freeze", Freeze_Cmd, "Toggles freezing for hiders.");
 	
 #if defined ANTI_CHEAT
 	RegConsoleCmd("overview_mode", Block_Cmd);
@@ -350,6 +354,7 @@ public OnClientDisconnect(client)
 #endif
 	
 		g_InThirdPersonView[client] = false;
+		g_IsFreezed[client] = false;
 		g_ModelChangeCount[client] = 0;
 		g_IsCTWaiting[client] = false;
 		g_WhistleCount[client] = 0;
@@ -381,6 +386,33 @@ public OnClientDisconnect(client)
 	}*/
 }
 
+// prevent players from ducking
+public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon)
+{
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
+	decl String:weaponName[30];
+	// don't allow ct's to shoot in the beginning of the round
+	new team = GetClientTeam(client);
+	GetClientWeapon(client, weaponName, sizeof(weaponName));
+	if(team == 3 && g_IsCTWaiting[client] && (buttons & IN_ATTACK || buttons & IN_ATTACK2))
+	{
+		buttons &= ~IN_ATTACK;
+		buttons &= ~IN_ATTACK2;
+	} // disable rightclick knifing for cts
+	else if(team == 3 && GetConVarBool(hns_cfg_disable_rightknife) && buttons & IN_ATTACK2 && !strcmp(weaponName, "weapon_knife"))
+	{
+		buttons &= ~IN_ATTACK2;
+	}
+	
+	// disable ducking for everyone
+	if(buttons & IN_DUCK && GetConVarBool(hns_cfg_disable_ducking))
+		buttons &= ~IN_DUCK;
+	
+	return Plugin_Continue;
+}
+
 // SDKHook Callbacks
 public Action:OnWeaponCanUse(client, weapon)
 {
@@ -396,27 +428,6 @@ public OnPreThink(client)
 {	
 	if(g_EnableHnS)
 	{
-		new buttons = GetClientButtons(client);
-		decl String:weaponName[30];
-		// don't allow ct's to shoot in the beginning of the round
-		new team = GetClientTeam(client);
-		GetClientWeapon(client, weaponName, sizeof(weaponName));
-		if(team == 3 && g_IsCTWaiting[client] && (buttons & IN_ATTACK || buttons & IN_ATTACK2))
-		{
-			buttons &= ~IN_ATTACK;
-			buttons &= ~IN_ATTACK2;
-		} // disable rightclick knifing for cts
-		else if(team == 3 && GetConVarBool(hns_cfg_disable_rightknife) && buttons & IN_ATTACK2 && !strcmp(weaponName, "weapon_knife"))
-		{
-			buttons &= ~IN_ATTACK2;
-		}
-		
-		// disable ducking for everyone
-		if(buttons & IN_DUCK && GetConVarBool(hns_cfg_disable_ducking))
-			buttons &= ~IN_DUCK;
-		
-		SetEntProp(client, Prop_Data, "m_nButtons", buttons);
-		
 		// hide players on radar
 		//SetEntProp(client, Prop_Send, "m_iHideHUD", (1<<4));
 		for(new target = 1; target < 65; target++){
@@ -488,6 +499,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		}
 		
 		g_WhistleCount[client] = 0;
+		g_IsFreezed[client] = false;
 
 		if(GetConVarBool(hns_cfg_freezects))
 			PrintToChat(client, "%s%t", PREFIX, "seconds to hide", RoundToFloor(GetConVarFloat(hns_cfg_freezetime)));
@@ -1168,6 +1180,27 @@ public Action:Display_Help(client,args)
 	AddMenuItem(menu, "3", buffer);
 	
 	DisplayMenu(menu, client, MENU_TIME_FOREVER);
+	return Plugin_Handled;
+}
+
+public Action:Freeze_Cmd(client,args)
+{
+	if(!g_EnableHnS || !GetConVarBool(hns_cfg_hider_freeze_cmd) || GetClientTeam(client) != 2 || !IsPlayerAlive(client))
+		return Plugin_Handled;
+	
+	if(g_IsFreezed[client] )
+	{
+		SetEntityMoveType(client, MOVETYPE_WALK);
+		g_IsFreezed[client] = false;
+		PrintToChat(client, "%s%t", PREFIX, "Hider Unfreezed");
+	}
+	else if (GetEntityFlags(client) & FL_ONGROUND) // only allow freezing when being on the ground!
+	{
+		SetEntityMoveType(client, MOVETYPE_NONE);
+		g_IsFreezed[client] = true;
+		PrintToChat(client, "%s%t", PREFIX, "Hider Freezed");
+	}
+	
 	return Plugin_Handled;
 }
 
