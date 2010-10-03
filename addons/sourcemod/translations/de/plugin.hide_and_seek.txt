@@ -3,102 +3,102 @@
 	
 	"Title Select Model"
 	{
-		"en"			"Wähle ein Model"
+		"de"			"Wähle ein Model"
 	}
 	
 	"Model Changed"
 	{
-		"en"			"Du bist jetzt ein(e)"
+		"de"			"Du bist jetzt ein(e)"
 	}
 
 	"Modelmenu Disabled"
 	{
-		"en"			"Du kannst dein Model in dieser Runde nicht nochmal ändern."
+		"de"			"Du kannst dein Model in dieser Runde nicht nochmal ändern."
 	}
 
 	"Did not choose model"
 	{
-		"en"			"Du hast kein Model ausgewählt. Automatische Zuweisung..."
+		"de"			"Du hast kein Model ausgewählt. Automatische Zuweisung..."
 	}
 	
 	"Print to console"
 	{
-		"en"			"Bitte kopiere das in deine Konsole:"
+		"de"			"Bitte kopiere das in deine Konsole:"
 	}
 	
 	"Only terrorists can select models"
 	{
-		"en"			"Nur Terroristen können Models auswählen."
+		"de"			"Nur Terroristen können Models auswählen."
 	}
 	
 	"Only terrorists can use"
 	{
-		"en"			"Nur Terroristen können diesen Befehl benutzen."
+		"de"			"Nur Terroristen können diesen Befehl benutzen."
 	}
 	
 	"CT team is full"
 	{
-		"en"			"Das CT Team ist voll!"
+		"de"			"Das CT Team ist voll!"
 	}
 
 	"Type again for ego"
 	{
-		"en"			"Schreibe /tp nochmal, um wieder zur Egoperspektive zu wechseln."
+		"de"			"Schreibe /tp nochmal, um wieder zur Egoperspektive zu wechseln."
 	}
 
 	"Wait for t to hide"
 	{
-		"en"			"Gib den Terroristen {1} Sekunden zum verstecken."
+		"de"			"Gib den Terroristen {1} Sekunden zum verstecken."
 	}
 
 	"seconds to hide"
 	{
-		"en"			"Du hast {1} Sekunden, um dich zu verstecken. Suche einen Platz, der zu deinem Model passt!"
+		"de"			"Du hast {1} Sekunden, um dich zu verstecken. Suche einen Platz, der zu deinem Model passt!"
 	}
 
 	"Go search"
 	{
-		"en"			"Du denkst nicht, dass alle Terroristen gut versteckt sind? Dann finde sie mal!"
+		"de"			"Du denkst nicht, dass alle Terroristen gut versteckt sind? Dann finde sie mal!"
 	}
 
 	"whistled"
 	{
-		"en"			"pfiff!"
+		"de"			"pfiff!"
 	}
     
 	"whistles left"
 	{
-		"en"			"Du darfst noch {1}x pfeifen."
+		"de"			"Du darfst noch {1}x pfeifen."
 	}
 
 	"T type /whistle"
 	{
-		"en"			"Terroristen können pfeifen, um den Suchern einen Tipp zu geben. Schreibe \"/whistle\" im Chat!"
+		"de"			"Terroristen können pfeifen, um den Suchern einen Tipp zu geben. Schreibe \"/whistle\" im Chat!"
 	}
 	
 	"whistle limit exceeded"
 	{
-		"en"			"Du hast bereits deine {1} Pfiffe dieser Runde benutzt."
+		"de"			"Du hast bereits deine {1} Pfiffe dieser Runde benutzt."
 	}
 
 	"T type /tp"
 	{
-		"en"			"Schreibe \"/tp\" im Chat, um die Thirdperson-Perspektive zu wechseln!"
+		"de"			"Schreibe \"/tp\" im Chat, um die Thirdperson-Perspektive zu wechseln!"
 	}
 
 	"Type !hide"
 	{
-		"en"			"Schreibe \"!hide\" im Chat, um das Modelmenü zu öffnen."
+		"de"			"Schreibe \"!hide\" im Chat, um das Modelmenü zu öffnen."
 	}
 
 	"Spectator Cheater"
 	{
-		"en"			"wurde dem Zuschauermodus zugeteilt, da er falsche cVar Werte eingestellt hat."
+		"de"			"wurde dem Zuschauermodus zugeteilt, da er falsche cVar Werte eingestellt hat."
 	}
 
 	"Kick bad cvars"
 	{
-		"en"			"Du musst die obrigen cVars ändern (Konsole), um Hide and Seek spielen zu können."
+		"de"			"Du musst die obrigen cVars ändern (Konsole), um Hide and Seek spielen zu können."
 	}
 
 	"protected cvar"
@@ -108,97 +108,97 @@
 
 	"got frags"
 	{
-		"en"			"Alle überlebenden Verstecker haben {1} Punkte bekommen. Gut gemacht!"
+		"de"			"Alle überlebenden Verstecker haben {1} Punkte bekommen. Gut gemacht!"
 	}
 
 	"Hider Freezed"
 	{
-		"en"			"Du wurdest eingefroren. Pass auf! Du kannst deine Sicht immernoch bewegen."
+		"de"			"Du wurdest eingefroren. Pass auf! Du kannst deine Sicht immernoch bewegen."
 	}
 
 	"Hider Unfreezed"
 	{
-		"en"			"Du kannst dich nun wieder bewegen."
+		"de"			"Du kannst dich nun wieder bewegen."
 	}
 
 
 	"HnS Help"
 	{
-		"en"			"Hide and Seek: Hilfe"
+		"de"			"Hide and Seek: Hilfe"
 	}
 
 	"Running HnS"
 	{
-		"en"			"Auf diesem Server läuft Hide and Seek."
+		"de"			"Auf diesem Server läuft Hide and Seek."
 	}
 
 	"Instructions 1"
 	{
-		"en"			"Terroristen suchen sich ein Model aus und verstecken sich, CTs suchen und töten sie."
+		"de"			"Terroristen suchen sich ein Model aus und verstecken sich, CTs suchen und töten sie."
 	}
 
 	"Available Commands"
 	{
-		"en"			"Verfügbare Chatbefehle"
+		"de"			"Verfügbare Chatbefehle"
 	}
 
 	"Howto CT"
 	{
-		"en"			"Wie spiele ich als Sucher?"
+		"de"			"Wie spiele ich als Sucher?"
 	}
 
 	"Instructions CT 1"
 	{
-		"en"			"Sucher müssen die Verstecker finden, wobei diese alles seien können - von einem Ölfass bis zu einer Zimmerpflanze, und töten."
+		"de"			"Sucher müssen die Verstecker finden, wobei diese alles seien können - von einem Ölfass bis zu einer Zimmerpflanze, und töten."
 	}
 
 	"Instructions CT 2"
 	{
-		"en"			"Sei vorsichtig beim Schießen! Du verlierst {1} HP pro Schuss."
+		"de"			"Sei vorsichtig beim Schießen! Du verlierst {1} HP pro Schuss."
 	}
 
 	"Instructions CT 3"
 	{
-		"en"			"Du erhälst {1} HP, wenn du einen Verstecker verletzt, und {2} HP, wenn du ihn tötest. Schau immer wieder mal hinter dich!"
+		"de"			"Du erhälst {1} HP, wenn du einen Verstecker verletzt, und {2} HP, wenn du ihn tötest. Schau immer wieder mal hinter dich!"
 	}
 
 	"Howto T"
 	{
-		"en"			"Wie spiele ich als Verstecker?"
+		"de"			"Wie spiele ich als Verstecker?"
 	}
 
 	"Instructions T 1"
 	{
-		"en"			"Verstecker wählen ein Model aus, welches oft auf dieser Map vorkommt, und suchen sich einen Platz, wo sie nicht auffallen."
+		"de"			"Verstecker wählen ein Model aus, welches oft auf dieser Map vorkommt, und suchen sich einen Platz, wo sie nicht auffallen."
 	}
 
 	"Instructions T 2"
 	{
-		"en"			"Bleib in Bewegung, um den Suchern eine Chance zu geben und die Spannung zu erhöhen!"
+		"de"			"Bleib in Bewegung, um den Suchern eine Chance zu geben und die Spannung zu erhöhen!"
 	}
 
 	"cmd hide"
 	{
-		"en"			"Zeigt das Modelauswahl Menü."
+		"de"			"Zeigt das Modelauswahl Menü."
 	}
 
 	"cmd tp"
 	{
-		"en"			"Schaltet die Perpektive in die dritte Person und zurück."
+		"de"			"Schaltet die Perpektive in die dritte Person und zurück."
 	}
 
 	"cmd whistle"
 	{
-		"en"			"Spielt einen Ton von der Position des Versteckers ab, um den Suchern einen Hinweis zu geben."
+		"de"			"Spielt einen Ton von der Position des Versteckers ab, um den Suchern einen Hinweis zu geben."
 	}
 
 	"cmd whoami"
 	{
-		"en"			"Schreibt den Namen des derzeitigen Models in den Chat."
+		"de"			"Schreibt den Namen des derzeitigen Models in den Chat."
 	}
 
 	"cmd hidehelp"
 	{
-		"en"			"Zeigt dieses Hilfemenü."
+		"de"			"Zeigt dieses Hilfemenü."
 	}
 }
