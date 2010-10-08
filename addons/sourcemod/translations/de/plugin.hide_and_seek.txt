@@ -103,7 +103,7 @@
 
 	"protected cvar"
 	{
-		"en"			"Dieser cVar ist geschützt. Lass es wie es ist!"
+		"de"			"Dieser cVar ist geschützt. Lass es wie es ist!"
 	}
 
 	"got frags"
@@ -113,7 +113,7 @@
 
 	"Hider Freezed"
 	{
-		"de"			"Du wurdest eingefroren. Pass auf! Du kannst deine Sicht immernoch bewegen."
+		"de"			"Du wurdest eingefroren."
 	}
 
 	"Hider Unfreezed"
@@ -201,4 +201,10 @@
 	{
 		"de"			"Zeigt dieses Hilfemenü."
 	}
+
+	"cmd freeze"
+	{
+		"de"			"Friert den Spieler ein."
+	}
+
 }

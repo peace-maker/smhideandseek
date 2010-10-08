@@ -118,7 +118,7 @@
 
 	"Hider Freezed"
 	{
-		"en"			"You're freezed in place. Remember that you're still able to move your view!"
+		"en"			"You're freezed in place."
 	}
 
 	"Hider Unfreezed"
@@ -201,6 +201,11 @@
 	"cmd whoami"
 	{
 		"en"			"Prints the current modelname in chat."
+	}
+
+	"cmd freeze"
+	{
+		"en"			"Freezes the hider on place."
 	}
 
 	"cmd hidehelp"

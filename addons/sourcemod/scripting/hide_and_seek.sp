@@ -39,7 +39,8 @@ new Handle:hns_cfg_hidersspeed = INVALID_HANDLE;
 new Handle:hns_cfg_disable_rightknife = INVALID_HANDLE;
 new Handle:hns_cfg_disable_ducking = INVALID_HANDLE;
 new Handle:hns_cfg_auto_thirdperson = INVALID_HANDLE;
-new Handle:hns_cfg_hider_freeze_cmd = INVALID_HANDLE;
+new Handle:hns_cfg_hider_freeze_mode = INVALID_HANDLE;
+new Handle:hns_cfg_hide_blood = INVALID_HANDLE;
 
 // primary enableswitch
 new bool:g_EnableHnS = true;
@@ -52,7 +53,9 @@ new Handle:kv;
 // offsets
 new g_Render;
 new g_Radar;
+new g_Bomb;
 new g_PlayerManager;
+new g_Freeze;
 
 new bool:g_InThirdPersonView[MAXPLAYERS+1] = {false,...};
 new bool:g_IsFreezed[MAXPLAYERS+1] = {false,...};
@@ -153,7 +156,8 @@ public OnPluginStart()
 	hns_cfg_disable_rightknife =CreateConVar("sm_hns_disable_rightknife", "1", "Disable rightclick for CTs with knife? Prevents knifing without losing heatlh. (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "0", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
-	hns_cfg_hider_freeze_cmd =	CreateConVar("sm_hns_hider_freeze_cmd", "1", "Enable /freeze command for hiders. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_hider_freeze_mode =	CreateConVar("sm_hns_hider_freeze_mode", "2", "0: Disables /freeze command for hiders, 1: Only freeze on position, be able to move camera, 2: Freeze completely (no cameramovents) (Default: 2)", FCVAR_PLUGIN, true, 0.00, true, 2.00);
+	hns_cfg_hide_blood =		CreateConVar("sm_hns_cfg_hide_blood", "1", "Hide blood on hider damage. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_EnableHnS = GetConVarBool(hns_cfg_enable);
 	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
@@ -170,7 +174,6 @@ public OnPluginStart()
 		
 		// Hooking events
 		HookEvent("player_spawn", Event_OnPlayerSpawn);
-		HookEvent("player_hurt", Event_OnPlayerHurt);
 		HookEvent("weapon_fire", Event_OnWeaponFire);
 		HookEvent("player_death", Event_OnPlayerDeath);
 		HookEvent("round_start", Event_OnRoundStart);
@@ -238,6 +241,12 @@ public OnPluginStart()
 	g_Radar = FindSendPropOffs("CCSPlayerResource", "m_bPlayerSpotted");
 	if(g_Radar == -1)
 		SetFailState("Couldnt find the m_bPlayerSpotted offset!");
+	g_Bomb = FindSendPropOffs("CCSPlayerResource", "m_bBombSpotted");
+	if(g_Bomb == -1)
+		SetFailState("Couldnt find the m_bBombSpotted offset!");
+	g_Freeze = FindSendPropOffs("CBasePlayer", "m_fFlags");
+	if(g_Freeze == -1)
+		SetFailState("Couldnt find the m_fFlags offset!");
 	
 	
 	AutoExecConfig(true, "plugin.hide_and_seek");
@@ -332,9 +341,14 @@ public OnClientPutInServer(client)
 		g_CheckVarTimer[client] = CreateTimer(1.0, StartVarChecker, client, TIMER_REPEAT);
 #endif
 	
+	// Disable radar
+	SDKHook(client, SDKHook_PreThink, OnPreThink);
+	
 	// Hook weapon pickup
 	SDKHook(client, SDKHook_WeaponCanUse, OnWeaponCanUse);
-	SDKHook(client, SDKHook_PreThink, OnPreThink);
+	
+	// Hook attackings to hide blood
+	SDKHook(client, SDKHook_TraceAttack, OnTraceAttack);
 }
 
 public OnClientDisconnect(client)
@@ -429,11 +443,59 @@ public OnPreThink(client)
 	if(g_EnableHnS)
 	{
 		// hide players on radar
-		//SetEntProp(client, Prop_Send, "m_iHideHUD", (1<<4));
 		for(new target = 1; target < 65; target++){
 			SetEntData(g_PlayerManager, g_Radar + target, 0, 4, true);
 		}
+		SetEntData(g_PlayerManager, g_Bomb, 0, 4, true);
 	}
+}
+
+// Used to block blood
+// set a normal model right before death to avoid errors
+public Action:OnTraceAttack(victim, &attacker, &inflictor, &Float:damage, &damagetype, &ammotype, hitbox, hitgroup)
+{
+	if(GetClientTeam(victim) == 2)
+	{
+		new remainingHealth = GetClientHealth(victim)-RoundToNearest(damage);
+		
+		// Attacker is a human?
+		if(GetConVarBool(hns_cfg_hp_seeker_enable) && attacker > 0 && attacker < MaxClients && IsPlayerAlive(attacker))
+		{
+			new decrease = GetConVarInt(hns_cfg_hp_seeker_dec);
+			
+			SetEntityHealth(attacker, GetClientHealth(attacker)+GetConVarInt(hns_cfg_hp_seeker_inc)+decrease);
+			
+			// the hider died? give extra health! need to add the decreased value again, since he fired his gun and lost hp.
+			// possible "bug": seeker could be slayed because weapon_fire is called earlier than player_hurt.
+			if(remainingHealth <= 0)
+				SetEntityHealth(attacker, GetClientHealth(attacker)+GetConVarInt(hns_cfg_hp_seeker_bonus)+decrease);
+		}
+		
+		// prevent errors in console because of missing death animation of prop ;)
+		if(remainingHealth <= 0)
+		{
+			SetEntityModel(victim, "models/player/t_guerilla.mdl");
+			return Plugin_Continue; // just let the damage get through
+		}
+		else if(GetConVarBool(hns_cfg_opacity_enable))
+		{
+			new alpha = 150 + RoundToNearest(10.5*float(remainingHealth/10));
+			
+			SetEntData(victim, g_Render+3, alpha, 1, true);
+			SetEntityRenderMode(victim, RENDER_TRANSTEXTURE);
+		}
+		
+		if(GetConVarBool(hns_cfg_hide_blood))
+		{
+			// Simulate the damage
+			SetEntityHealth(victim, remainingHealth);
+			
+			// Don't show the blood!
+			return Plugin_Handled;
+		}
+	}
+	
+	return Plugin_Continue;
 }
 
 /*
@@ -671,42 +733,6 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 	return Plugin_Continue;
 }
 
-// set a normal model right before death to avoid errors
-public Action:Event_OnPlayerHurt(Handle:event, const String:name[], bool:dontBroadcast)
-{
-	new client = GetClientOfUserId(GetEventInt(event, "userid"));
-	new attacker = GetClientOfUserId(GetEventInt(event, "attacker"));
-	new remainingHeatlh = GetEventInt(event, "health");
-	
-	if(GetClientTeam(client) == 2)
-	{
-		// prevent errors in console because of missing death animation of prop ;)
-		if(remainingHeatlh <= 0)
-			SetEntityModel(client, "models/player/t_guerilla.mdl");
-		else if(GetConVarBool(hns_cfg_opacity_enable))
-		{
-			new alpha = 150 + RoundToNearest(10.5*float(remainingHeatlh/10));			
-			
-			SetEntData(client,g_Render+3,alpha,1,true);
-			SetEntityRenderMode(client, RENDER_TRANSTEXTURE);
-		}
-		
-		// attacker is a human?
-		if(GetConVarBool(hns_cfg_hp_seeker_enable) && attacker > 0 && attacker < MaxClients && IsPlayerAlive(attacker))
-		{
-			new decrease = GetConVarInt(hns_cfg_hp_seeker_dec);
-			
-			SetEntityHealth(attacker, GetClientHealth(attacker)+GetConVarInt(hns_cfg_hp_seeker_inc)+decrease);
-			
-			// the hider died? give extra health! need to add the decreased value again, since he fired his gun and lost hp.
-			// possible "bug": seeker could be slayed because weapon_fire is called earlier than player_hurt.
-			if(remainingHeatlh <= 0)
-				SetEntityHealth(attacker, GetClientHealth(attacker)+GetConVarInt(hns_cfg_hp_seeker_bonus)+decrease);
-		}
-	}
-	return Plugin_Continue;
-}
-
 // remove ragdolls on death...
 public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 {
@@ -744,7 +770,7 @@ public Action:FreezePlayer(Handle:timer, any:client)
 	if(!IsClientInGame(client) || !IsPlayerAlive(client))
 		return Plugin_Handled;
 	
-	SetEntityMoveType(client, MOVETYPE_NONE);
+	SetEntData(client, g_Freeze, FL_CLIENT|FL_ATCONTROLS, 4, true);
 	PerformBlind(client, 255);
 	
 	return Plugin_Handled;
@@ -759,7 +785,7 @@ public Action:UnFreezePlayer(Handle:timer, any:client)
 	if(!IsClientInGame(client) || !IsPlayerAlive(client))
 		return Plugin_Handled;
 	
-	SetEntityMoveType(client, MOVETYPE_WALK);
+	SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
 	
 #if defined ANTI_CHEAT
 	if(!IsConVarCheater(client))
@@ -1163,10 +1189,10 @@ public Action:Display_Help(client,args)
 	SetMenuExitButton(menu, true);
 	
 	Format(buffer, sizeof(buffer), "%T", "Running HnS", client);
-	AddMenuItem(menu, "", buffer, ITEMDRAW_DISABLED);
+	AddMenuItem(menu, "", buffer);
 	
 	Format(buffer, sizeof(buffer), "%T", "Instructions 1", client);
-	AddMenuItem(menu, "", buffer, ITEMDRAW_DISABLED);
+	AddMenuItem(menu, "", buffer);
 	
 	AddMenuItem(menu, "", "", ITEMDRAW_SPACER);
 	
@@ -1185,18 +1211,26 @@ public Action:Display_Help(client,args)
 
 public Action:Freeze_Cmd(client,args)
 {
-	if(!g_EnableHnS || !GetConVarBool(hns_cfg_hider_freeze_cmd) || GetClientTeam(client) != 2 || !IsPlayerAlive(client))
+	if(!g_EnableHnS || !GetConVarInt(hns_cfg_hider_freeze_mode) || GetClientTeam(client) != 2 || !IsPlayerAlive(client))
 		return Plugin_Handled;
 	
 	if(g_IsFreezed[client] )
 	{
-		SetEntityMoveType(client, MOVETYPE_WALK);
+		if(GetConVarInt(hns_cfg_hider_freeze_mode) == 1)
+			SetEntityMoveType(client, MOVETYPE_WALK);
+		else
+			SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
+		
 		g_IsFreezed[client] = false;
 		PrintToChat(client, "%s%t", PREFIX, "Hider Unfreezed");
 	}
 	else if (GetEntityFlags(client) & FL_ONGROUND) // only allow freezing when being on the ground!
 	{
-		SetEntityMoveType(client, MOVETYPE_NONE);
+		if(GetConVarInt(hns_cfg_hider_freeze_mode) == 1)
+			SetEntityMoveType(client, MOVETYPE_NONE); // Still able to move camera
+		else
+			SetEntData(client, g_Freeze, FL_CLIENT|FL_ATCONTROLS, 4, true); // Can't move anything
+		
 		g_IsFreezed[client] = true;
 		PrintToChat(client, "%s%t", PREFIX, "Hider Freezed");
 	}
@@ -1327,8 +1361,16 @@ public Menu_Help(Handle:menu, MenuAction:action, param1, param2)
 				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
 				Format(buffer, sizeof(buffer), "/tp, /third, /thirdperson - %T", "cmd tp", param1);
 				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
-				Format(buffer, sizeof(buffer), "/whistle - %T", "cmd whistle", param1);
-				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				if(GetConVarBool(hns_cfg_whistle))
+				{
+					Format(buffer, sizeof(buffer), "/whistle - %T", "cmd whistle", param1);
+					AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				}
+				if(GetConVarInt(hns_cfg_hider_freeze_mode))
+				{
+					Format(buffer, sizeof(buffer), "/freeze - %T", "cmd freeze", param1);
+					AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
+				}
 				Format(buffer, sizeof(buffer), "/whoami - %T", "cmd whoami", param1);
 				AddMenuItem(menu2, "", buffer, ITEMDRAW_DISABLED);
 				Format(buffer, sizeof(buffer), "/hidehelp - %T", "cmd hidehelp", param1);
@@ -1706,7 +1748,6 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		
 		// Unhooking events
 		UnhookEvent("player_spawn", Event_OnPlayerSpawn);
-		UnhookEvent("player_hurt", Event_OnPlayerHurt);
 		UnhookEvent("weapon_fire", Event_OnWeaponFire);
 		UnhookEvent("player_death", Event_OnPlayerDeath);
 		UnhookEvent("round_start", Event_OnRoundStart);
@@ -1789,7 +1830,6 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		
 		// Hook events again
 		HookEvent("player_spawn", Event_OnPlayerSpawn);
-		HookEvent("player_hurt", Event_OnPlayerHurt);
 		HookEvent("weapon_fire", Event_OnWeaponFire);
 		HookEvent("player_death", Event_OnPlayerDeath);
 		HookEvent("round_start", Event_OnRoundStart);
