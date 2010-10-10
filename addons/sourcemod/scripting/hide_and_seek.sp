@@ -41,6 +41,7 @@ new Handle:hns_cfg_disable_ducking = INVALID_HANDLE;
 new Handle:hns_cfg_auto_thirdperson = INVALID_HANDLE;
 new Handle:hns_cfg_hider_freeze_mode = INVALID_HANDLE;
 new Handle:hns_cfg_hide_blood = INVALID_HANDLE;
+new Handle:hns_cfg_show_hidehelp = INVALID_HANDLE;
 
 // primary enableswitch
 new bool:g_EnableHnS = true;
@@ -157,7 +158,8 @@ public OnPluginStart()
 	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "0", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_hider_freeze_mode =	CreateConVar("sm_hns_hider_freeze_mode", "2", "0: Disables /freeze command for hiders, 1: Only freeze on position, be able to move camera, 2: Freeze completely (no cameramovents) (Default: 2)", FCVAR_PLUGIN, true, 0.00, true, 2.00);
-	hns_cfg_hide_blood =		CreateConVar("sm_hns_cfg_hide_blood", "1", "Hide blood on hider damage. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_hide_blood =		CreateConVar("sm_hns_hide_blood", "1", "Hide blood on hider damage. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_show_hidehelp =		CreateConVar("sm_hns_show_hidehelp", "1", "Show helpmenu explaining the game on first player spawn. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_EnableHnS = GetConVarBool(hns_cfg_enable);
 	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
@@ -582,6 +584,14 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			{
 				KillTimer(g_ShowCountdownTimer);
 				g_ShowCountdownTimer = INVALID_HANDLE;
+				for(new i=1;i<MaxClients;i++)
+				{
+					if(IsClientInGame(i))
+					{
+						SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", 0.0);
+						SetEntProp(i, Prop_Send, "m_iProgressBarDuration", 0);
+					}
+				}
 			}
 			else if(GetConVarBool(hns_cfg_freezects))
 			{
@@ -610,7 +620,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		}
 		
 		// show help menu on first spawn
-		if(g_FirstSpawn[client])
+		if(GetConVarBool(hns_cfg_show_hidehelp) && g_FirstSpawn[client])
 		{
 			Display_Help(client, 0);
 			g_FirstSpawn[client] = false;
@@ -910,10 +920,31 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 {
 	PrintCenterTextAll("%d", seconds);
 	seconds--;
-	if(seconds <= 0)
+	if(seconds < 0)
 	{
 		g_ShowCountdownTimer = INVALID_HANDLE;
+		for(new i=1;i<MaxClients;i++)
+		{
+			if(IsClientInGame(i))
+			{
+				SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", 0.0);
+				SetEntProp(i, Prop_Send, "m_iProgressBarDuration", 0);
+			}
+		}
 		return Plugin_Handled;
+	}
+	
+	// m_iProgressBarDuration has a limit of 15 seconds, so start showing the bar on 15 seconds left.
+	if((seconds+1) <= 15)
+	{
+		for(new i=1;i<MaxClients;i++)
+		{
+			if(IsClientInGame(i) && GetEntProp(i, Prop_Send, "m_iProgressBarDuration") == 0)
+			{
+				SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", GetGameTime());
+				SetEntProp(i, Prop_Send, "m_iProgressBarDuration", seconds);
+			}
+		}
 	}
 	
 	g_ShowCountdownTimer = CreateTimer(1.0, ShowCountdown, seconds);
@@ -1330,7 +1361,7 @@ public Menu_Group(Handle:menu, MenuAction:action, client, param2)
 		}
 		
 		// display the help menu afterwards on first spawn
-		if(g_FirstSpawn[client])
+		if(GetConVarBool(hns_cfg_show_hidehelp) && g_FirstSpawn[client])
 		{
 			Display_Help(client, 0);
 			g_FirstSpawn[client] = false;
@@ -1660,7 +1691,7 @@ SetRandomModel(client)
 	g_ModelChangeCount[client]++;
 	
 	// display the help menu afterwards on first spawn
-	if(g_FirstSpawn[client])
+	if(GetConVarBool(hns_cfg_show_hidehelp) && g_FirstSpawn[client])
 	{
 		Display_Help(client, 0);
 		g_FirstSpawn[client] = false;
