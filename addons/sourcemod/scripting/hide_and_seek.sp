@@ -344,7 +344,7 @@ public OnClientPutInServer(client)
 #endif
 	
 	// Disable radar
-	SDKHook(client, SDKHook_PreThink, OnPreThink);
+	SDKHook(client, SDKHook_PostThink, OnPostThink);
 	
 	// Hook weapon pickup
 	SDKHook(client, SDKHook_WeaponCanUse, OnWeaponCanUse);
@@ -440,7 +440,7 @@ public Action:OnWeaponCanUse(client, weapon)
 	return Plugin_Continue;
 }
 
-public OnPreThink(client)
+public OnPostThink(client)
 {	
 	if(g_EnableHnS)
 	{
