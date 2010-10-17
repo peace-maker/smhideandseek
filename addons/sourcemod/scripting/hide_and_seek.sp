@@ -99,8 +99,7 @@ new String:protected_cvars[][] = {"mp_flashlight",
 								  "sv_nomvp", 
 								  "sv_nostats", 
 								  "mp_playerid",
-								  "sv_allowminmodels",
-								  "sv_turbophysics"
+								  "sv_allowminmodels"
 								 };
 new forced_values[] = {0, // mp_flashlight
 					   0, // sv_footsteps
@@ -112,8 +111,7 @@ new forced_values[] = {0, // mp_flashlight
 					   1, // sv_nomvp
 					   1, // sv_nostats
 					   1, // mp_playerid
-					   0, // sv_allowminmodels
-					   0 // sv_turbophysics
+					   0 // sv_allowminmodels
 					  };
 new previous_values[11] = {0,...}; // save previous values when forcing above, so we can restore the config if hns is disabled midgame. !same as comment next line!
 new Handle:g_ProtectedConvar[11] = {INVALID_HANDLE,...}; // 11 = amount of protected_cvars. update if you add one.
