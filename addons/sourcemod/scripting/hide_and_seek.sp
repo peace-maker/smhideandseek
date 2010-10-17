@@ -926,22 +926,25 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 {
 	PrintCenterTextAll("%d", seconds);
 	seconds--;
-	if(GetConVarBool(hns_cfg_show_progressbar) && seconds < 0)
+	if(seconds < 0)
 	{
 		g_ShowCountdownTimer = INVALID_HANDLE;
-		for(new i=1;i<MaxClients;i++)
+		if(GetConVarBool(hns_cfg_show_progressbar))
 		{
-			if(IsClientInGame(i))
+			for(new i=1;i<MaxClients;i++)
 			{
-				SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", 0.0);
-				SetEntProp(i, Prop_Send, "m_iProgressBarDuration", 0);
+				if(IsClientInGame(i))
+				{
+					SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", 0.0);
+					SetEntProp(i, Prop_Send, "m_iProgressBarDuration", 0);
+				}
 			}
 		}
 		return Plugin_Handled;
 	}
 	
 	// m_iProgressBarDuration has a limit of 15 seconds, so start showing the bar on 15 seconds left.
-	if(GetConVarBool(hns_cfg_show_progressbar) && (seconds+1) <= 15)
+	if(GetConVarBool(hns_cfg_show_progressbar) && (seconds+1) < 15)
 	{
 		for(new i=1;i<MaxClients;i++)
 		{
