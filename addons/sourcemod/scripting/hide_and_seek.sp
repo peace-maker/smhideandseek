@@ -42,6 +42,7 @@ new Handle:hns_cfg_auto_thirdperson = INVALID_HANDLE;
 new Handle:hns_cfg_hider_freeze_mode = INVALID_HANDLE;
 new Handle:hns_cfg_hide_blood = INVALID_HANDLE;
 new Handle:hns_cfg_show_hidehelp = INVALID_HANDLE;
+new Handle:hns_cfg_show_progressbar = INVALID_HANDLE;
 
 // primary enableswitch
 new bool:g_EnableHnS = true;
@@ -98,7 +99,8 @@ new String:protected_cvars[][] = {"mp_flashlight",
 								  "sv_nomvp", 
 								  "sv_nostats", 
 								  "mp_playerid",
-								  "sv_allowminmodels"
+								  "sv_allowminmodels",
+								  "sv_turbophysics"
 								 };
 new forced_values[] = {0, // mp_flashlight
 					   0, // sv_footsteps
@@ -110,7 +112,8 @@ new forced_values[] = {0, // mp_flashlight
 					   1, // sv_nomvp
 					   1, // sv_nostats
 					   1, // mp_playerid
-					   0 //sv_allowminmodels
+					   0, // sv_allowminmodels
+					   0 // sv_turbophysics
 					  };
 new previous_values[11] = {0,...}; // save previous values when forcing above, so we can restore the config if hns is disabled midgame. !same as comment next line!
 new Handle:g_ProtectedConvar[11] = {INVALID_HANDLE,...}; // 11 = amount of protected_cvars. update if you add one.
@@ -160,6 +163,7 @@ public OnPluginStart()
 	hns_cfg_hider_freeze_mode =	CreateConVar("sm_hns_hider_freeze_mode", "2", "0: Disables /freeze command for hiders, 1: Only freeze on position, be able to move camera, 2: Freeze completely (no cameramovents) (Default: 2)", FCVAR_PLUGIN, true, 0.00, true, 2.00);
 	hns_cfg_hide_blood =		CreateConVar("sm_hns_hide_blood", "1", "Hide blood on hider damage. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_show_hidehelp =		CreateConVar("sm_hns_show_hidehelp", "1", "Show helpmenu explaining the game on first player spawn. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_show_progressbar =	CreateConVar("sm_hns_show_progressbar", "1", "Show progressbar for last 15 seconds of freezetime. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_EnableHnS = GetConVarBool(hns_cfg_enable);
 	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
@@ -585,12 +589,15 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			{
 				KillTimer(g_ShowCountdownTimer);
 				g_ShowCountdownTimer = INVALID_HANDLE;
-				for(new i=1;i<MaxClients;i++)
+				if(GetConVarBool(hns_cfg_show_progressbar))
 				{
-					if(IsClientInGame(i))
+					for(new i=1;i<MaxClients;i++)
 					{
-						SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", 0.0);
-						SetEntProp(i, Prop_Send, "m_iProgressBarDuration", 0);
+						if(IsClientInGame(i))
+						{
+							SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", 0.0);
+							SetEntProp(i, Prop_Send, "m_iProgressBarDuration", 0);
+						}
 					}
 				}
 			}
@@ -921,7 +928,7 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 {
 	PrintCenterTextAll("%d", seconds);
 	seconds--;
-	if(seconds < 0)
+	if(GetConVarBool(hns_cfg_show_progressbar) && seconds < 0)
 	{
 		g_ShowCountdownTimer = INVALID_HANDLE;
 		for(new i=1;i<MaxClients;i++)
@@ -936,7 +943,7 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 	}
 	
 	// m_iProgressBarDuration has a limit of 15 seconds, so start showing the bar on 15 seconds left.
-	if((seconds+1) <= 15)
+	if(GetConVarBool(hns_cfg_show_progressbar) && (seconds+1) <= 15)
 	{
 		for(new i=1;i<MaxClients;i++)
 		{
