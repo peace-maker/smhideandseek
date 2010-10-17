@@ -5,7 +5,7 @@
 
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "1.3.0"
+#define PLUGIN_VERSION "1.3.1"
 
 // uncomment, if you need to force some cvars on clients
 //#define ANTI_CHEAT
@@ -763,7 +763,7 @@ public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBr
 		return;
 	
 	new ragdoll = GetEntPropEnt(client, Prop_Send, "m_hRagdoll");
-	if (ragdoll<0) 
+	if (ragdoll<0)
 		return;
 	
 	RemoveEdict(ragdoll);
