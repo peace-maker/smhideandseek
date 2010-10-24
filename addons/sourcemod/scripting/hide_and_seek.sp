@@ -24,6 +24,7 @@ new Handle:hns_cfg_changelimittime = INVALID_HANDLE;
 new Handle:hns_cfg_autochoose = INVALID_HANDLE;
 new Handle:hns_cfg_whistle = INVALID_HANDLE;
 new Handle:hns_cfg_whistle_times = INVALID_HANDLE;
+new Handle:hns_cfg_whistle_delay = INVALID_HANDLE;
 #if defined ANTI_CHEAT
 new Handle:hns_cfg_anticheat = INVALID_HANDLE;
 new Handle:hns_cfg_cheat_punishment = INVALID_HANDLE;
@@ -119,6 +120,8 @@ new Handle:g_forceCamera = INVALID_HANDLE;
 
 // whistle sounds
 new g_WhistleCount[MAXPLAYERS+1] = {0,...};
+new Handle:g_WhistleDelay = INVALID_HANDLE;
+new bool:g_WhistlingAllowed = true;
 new String:whistle_sounds[][] = {"ambient/animal/cow.wav", "ambient/animal/horse_4.wav", "ambient/animal/horse_5.wav", "ambient/machines/train_horn_3.wav", "ambient/misc/creak3.wav", "doors/door_metal_gate_close1.wav", "ambient/misc/flush1.wav"};
 
 public Plugin:myinfo = 
@@ -127,7 +130,7 @@ public Plugin:myinfo =
 	author = "Jannik 'Peace-Maker' Hartung and Vladislav Dolgov",
 	description = "Terrorists set a model and hide, CT seek terrorists.",
 	version = PLUGIN_VERSION,
-	url = "http://www.elistor.ru/ | http://www.wcfan.de/"
+	url = "http://www.wcfan.de/ | http://www.elistor.ru/"
 };
 
 public OnPluginStart()
@@ -143,6 +146,7 @@ public OnPluginStart()
 	hns_cfg_autochoose = 		CreateConVar("sm_hns_autochoose", "0", "Should the plugin choose models for the hiders automatically?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_whistle = 			CreateConVar("sm_hns_whistle", "1", "Are terrorists allowed to whistle?", FCVAR_PLUGIN);
 	hns_cfg_whistle_times = 	CreateConVar("sm_hns_whistle_times", "5", "How many times a hider is allowed to whistle per round?", FCVAR_PLUGIN);
+	hns_cfg_whistle_delay =		CreateConVar("sm_hns_whistle_delay", "25.0", "How long after spawn should we delay the use of whistle?.", FCVAR_PLUGIN, true, 0.00, true, 120.00);
 #if defined ANTI_CHEAT
 	hns_cfg_anticheat = 		CreateConVar("sm_hns_anticheat", "1", "Check player cheat convars, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_cheat_punishment = 	CreateConVar("sm_hns_cheat_punishment", "1", "How to punish players with wrong cvar values after 15 seconds? 0: Disabled. 1: Switch to Spectator. 2: Kick", FCVAR_PLUGIN, true, 0.00, true, 2.00);
@@ -567,6 +571,17 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		
 		g_WhistleCount[client] = 0;
 		g_IsFreezed[client] = false;
+		
+		new Float:whistle_delay = GetConVarFloat(hns_cfg_whistle_delay);
+		if(whistle_delay > 0.0 && g_WhistleDelay == INVALID_HANDLE)
+		{
+			g_WhistlingAllowed = false;
+			g_WhistleDelay = CreateTimer(whistle_delay, Timer_AllowWhistle, _, TIMER_FLAG_NO_MAPCHANGE);
+		}
+		else
+		{
+			g_WhistlingAllowed = true;
+		}
 
 		if(GetConVarBool(hns_cfg_freezects))
 			PrintToChat(client, "%s%t", PREFIX, "seconds to hide", RoundToFloor(GetConVarFloat(hns_cfg_freezetime)));
@@ -702,6 +717,12 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 	{
 		KillTimer(g_RoundTimeTimer);
 		g_RoundTimeTimer = INVALID_HANDLE;
+	}
+	
+	if(g_WhistleDelay != INVALID_HANDLE)
+	{
+		KillTimer(g_WhistleDelay);
+		g_WhistleDelay = INVALID_HANDLE;
 	}
 	
 	new winnerTeam = GetEventInt(event, "winner");
@@ -944,7 +965,7 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 	}
 	
 	// m_iProgressBarDuration has a limit of 15 seconds, so start showing the bar on 15 seconds left.
-	if(GetConVarBool(hns_cfg_show_progressbar) && (seconds+1) < 15)
+	if(GetConVarBool(hns_cfg_show_progressbar) && (seconds) < 15)
 	{
 		for(new i=1;i<MaxClients;i++)
 		{
@@ -989,6 +1010,13 @@ public Action:ShowRoundTime(Handle:timer, any:seconds)
 	return Plugin_Handled;
 }
 
+public Action:Timer_AllowWhistle(Handle:timer, any:data)
+{
+	g_WhistlingAllowed = true;
+	
+	g_WhistleDelay = INVALID_HANDLE;
+	return Plugin_Handled;
+}
 /*
 * 
 * Console Command Handling
@@ -1160,6 +1188,12 @@ public Action:Play_Whistle(client,args)
 		return Plugin_Handled;
 	}
 	
+	if(!g_WhistlingAllowed)
+	{
+		PrintToChat(client, "%s%t", PREFIX, "Whistling not allowed yet");
+		return Plugin_Handled;
+	}
+	
 	new cvarWhistleTimes = GetConVarInt(hns_cfg_whistle_times);
 	
 	if(g_WhistleCount[client] < cvarWhistleTimes)
@@ -1216,6 +1250,9 @@ public Action:Display_ModelName(client,args)
 	return Plugin_Handled;
 }
 
+
+// say /hidehelp
+// Show the help menu
 public Action:Display_Help(client,args)
 {
 	if(!g_EnableHnS)
@@ -1249,6 +1286,8 @@ public Action:Display_Help(client,args)
 	return Plugin_Handled;
 }
 
+// say /freeze
+// Freeze hiders in position
 public Action:Freeze_Cmd(client,args)
 {
 	if(!g_EnableHnS || !GetConVarInt(hns_cfg_hider_freeze_mode) || GetClientTeam(client) != 2 || !IsPlayerAlive(client))

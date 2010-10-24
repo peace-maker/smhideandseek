@@ -74,6 +74,11 @@
 		"en"			"You are allowed to whistle {1} more times."
 	}
 
+	"Whistling not allowed yet"
+	{
+		"en"			"Whistling is not allowed yet."
+	}
+
 	"T type /whistle"
 	{
 		"en"			"Terrorists may whistle to give a hint. Type \"/whistle\" in chat!"

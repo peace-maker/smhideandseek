@@ -71,6 +71,11 @@
 		"de"			"Du darfst noch {1}x pfeifen."
 	}
 
+	"Whistling not allowed yet"
+	{
+		"de"			"Pfeifen ist noch nicht erlaubt."
+	}
+
 	"T type /whistle"
 	{
 		"de"			"Terroristen können pfeifen, um den Suchern einen Tipp zu geben. Schreibe \"/whistle\" im Chat!"

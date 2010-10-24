@@ -71,6 +71,11 @@
 		"fr"			"Vous pouvez siffler encore {1} fois."
 	}
 
+	"Whistling not allowed yet"
+	{
+		"fr"			"Siffler n'est pas autorisé pour le moment."
+	}
+
 	"T type /whistle"
 	{
 		"fr"			"Les terroristes peuvent siffler pour donner un indice. Tapez \"/whistle\" dans le chat!"
@@ -113,37 +118,37 @@
 
 	"Hider Freezed"
 	{
-		"fr"			"You're freezed in place."
+		"fr"			"Vous êtes gelé en place."
 	}
 
 	"Hider Unfreezed"
 	{
-		"fr"			"You're able to move again."
+		"fr"			"Vous êtes en mesure de se déplacer à nouveau."
 	}
 
 	"HnS Help"
 	{
-		"fr"			"Hide and Seek: Help"
+		"fr"			"Hide and Seek: Aide"
 	}
 
 	"Running HnS"
 	{
-		"fr"			"This server is running Hide and Seek."
+		"fr"			"Ce serveur est en cours d'exécution Hide and Seek."
 	}
 
 	"Instructions 1"
 	{
-		"fr"			"Terrorists choose a model and hide, CTs search and kill them."
+		"fr"			"Les terroristes choisissent un modèle et se cacher, de recherche CT et de les tuer."
 	}
 
 	"Available Commands"
 	{
-		"fr"			"Available Chat Commands"
+		"fr"			"Disponible commandes de chat"
 	}
 
 	"Howto CT"
 	{
-		"fr"			"How to play as seeker?"
+		"fr"			"Comment jouer en tant que demandeur?"
 	}
 
 	"Instructions CT 1"
