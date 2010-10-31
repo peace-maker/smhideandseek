@@ -23,7 +23,7 @@
 	
 	"Print to console"
 	{
-		"fr"			"Veuillez taper cela dans la console:"
+		"fr"			"Veuillez taper ceci dans la console:"
 	}
 	
 	"Only terrorists can select models"
@@ -108,7 +108,7 @@
 
 	"protected cvar"
 	{
-		"fr"			"Cette Cvar est protégé."
+		"fr"			"Cette Cvar est protégée."
 	}
 
 	"got frags"
@@ -118,12 +118,12 @@
 
 	"Hider Freezed"
 	{
-		"fr"			"Vous êtes gelé en place."
+		"fr"			"Vous êtes maintenant freeze."
 	}
 
 	"Hider Unfreezed"
 	{
-		"fr"			"Vous êtes en mesure de se déplacer à nouveau."
+		"fr"			"Vous pouvez de nouveau bouger."
 	}
 
 	"HnS Help"
@@ -133,81 +133,81 @@
 
 	"Running HnS"
 	{
-		"fr"			"Ce serveur est en cours d'exécution Hide and Seek."
+		"fr"			"Ce serveur est un Hide and Seek"
 	}
 
 	"Instructions 1"
 	{
-		"fr"			"Les terroristes choisissent un modèle et se cacher, de recherche CT et de les tuer."
+		"fr"			"Les Terroristes choisissent un model, et les CTs les cherchent pour les tuer."
 	}
 
 	"Available Commands"
 	{
-		"fr"			"Disponible commandes de chat"
+		"fr"			"Commandes de chat disponibles"
 	}
 
 	"Howto CT"
 	{
-		"fr"			"Comment jouer en tant que demandeur?"
+		"fr"			"Comment jouer le chercheur?"
 	}
 
 	"Instructions CT 1"
 	{
-		"fr"			"Seekers have to find the hiders, who could be everything from an oil drum to a pot plant and kill them."
+		"fr"			"Les chercheurs doivent trouver les joueurs cachés, qui peuvent être n'importe quoi, d'un baril à un pot de plante, et les tuer."
 	}
 
 	"Instructions CT 2"
 	{
-		"fr"			"Be careful with your shootings! You may loose {1} HP per shot."
+		"fr"			"Soyez prudent avec vos tirs! Vous pouvez perdre {1} HP par coup."
 	}
 
 	"Instructions CT 3"
 	{
-		"fr"			"You gain {1} HP on hider hurt and {2} HP when killing a hider. Always keep an eye behind you!"
+		"fr"			"Vous gagnez {1} HP par joueur caché blessé et {2} HP par joueur caché tué. Gardez toujours un oeil derrière vous!"
 	}
 
 	"Howto T"
 	{
-		"fr"			"How to play as hider?"
+		"fr"			"Comment jouer celui qui se cache?"
 	}
 
 	"Instructions T 1"
 	{
-		"fr"			"Hiders choose a model which is common on the current map and should search a place they blend in best."
+		"fr"			"Les joueurs cachés choisissent un model qui est commun sur la map actuelle et vont chercher un endroit où ils se fondent le mieux dans le décor."
 	}
 
 	"Instructions T 2"
 	{
-		"fr"			"Keep moving to give the seekers a chance and higher the action!"
+		"fr"			"Restez en mouvement pour donner aux chercheurs une chance et augmenter l'action!"
 	}
 
 	"cmd hide"
 	{
-		"fr"			"Displays the model choice menu."
+		"fr"			"Ouvre le menu de choix de models."
 	}
 
 	"cmd tp"
 	{
-		"fr"			"Toggles the thirdperson view."
+		"fr"			"Enclenche la vue 3ème personne."
 	}
 
 	"cmd whistle"
 	{
-		"fr"			"Play a sound from the hiders position to give the seekers a hint."
+		"fr"			"Joue un son depuis la position du joueur caché pour donner un indice aux chercheurs."
 	}
 
 	"cmd whoami"
 	{
-		"fr"			"Prints the current modelname in chat."
+		"fr"			"Affiche le nom du model en cours dans le chat."
 	}
 
 	"cmd freeze"
 	{
-		"fr"			"Freezes the hider on place."
+		"fr"			"Freeze les joueurs cachés sur place."
 	}
 
 	"cmd hidehelp"
 	{
-		"fr"			"Displays this help menu."
+		"fr"			"Ouvre le menu d'aide."
 	}
 }

@@ -351,7 +351,10 @@ public OnClientPutInServer(client)
 	
 	// Disable radar
 	SDKHook(client, SDKHook_PreThink, OnPrePostThink);
+	SDKHook(client, SDKHook_Think, OnPrePostThink);
+	SDKHook(client, SDKHook_PreThinkPost, OnPrePostThink);
 	SDKHook(client, SDKHook_PostThink, OnPrePostThink);
+	SDKHook(client, SDKHook_PostThinkPost, OnPrePostThink);
 	
 	// Hook weapon pickup
 	SDKHook(client, SDKHook_WeaponCanUse, OnWeaponCanUse);
@@ -695,6 +698,12 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 	// more in OnPreThink hook
 	g_PlayerManager = FindEntityByClassname(0, "cs_player_manager");
 	
+	SDKHook(g_PlayerManager, SDKHook_PreThink, OnPrePostThink);
+	SDKHook(g_PlayerManager, SDKHook_Think, OnPrePostThink);
+	SDKHook(g_PlayerManager, SDKHook_PreThinkPost, OnPrePostThink);
+	SDKHook(g_PlayerManager, SDKHook_PostThink, OnPrePostThink);
+	SDKHook(g_PlayerManager, SDKHook_PostThinkPost, OnPrePostThink);
+	
 	// show the roundtime in env_hudhint entity
 	new realRoundTime = RoundToNearest(GetConVarFloat(g_roundTime)*60.0);
 	g_RoundTimeTimer = CreateTimer(1.0, ShowRoundTime, realRoundTime, TIMER_FLAG_NO_MAPCHANGE);
@@ -793,6 +802,17 @@ public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBr
 		return;
 	
 	RemoveEdict(ragdoll);
+	
+	// Unfreeze, if freezed before
+	if(g_IsFreezed[client])
+	{
+		if(GetConVarInt(hns_cfg_hider_freeze_mode) == 1)
+			SetEntityMoveType(client, MOVETYPE_WALK);
+		else
+			SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
+		
+		g_IsFreezed[client] = false;
+	}
 }
 
 /*
@@ -1293,7 +1313,7 @@ public Action:Freeze_Cmd(client,args)
 	if(!g_EnableHnS || !GetConVarInt(hns_cfg_hider_freeze_mode) || GetClientTeam(client) != 2 || !IsPlayerAlive(client))
 		return Plugin_Handled;
 	
-	if(g_IsFreezed[client] )
+	if(g_IsFreezed[client])
 	{
 		if(GetConVarInt(hns_cfg_hider_freeze_mode) == 1)
 			SetEntityMoveType(client, MOVETYPE_WALK);
