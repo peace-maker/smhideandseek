@@ -123,7 +123,7 @@
 
 	"Hider Freezed"
 	{
-		"en"			"You're freezed in place."
+		"en"			"You're frozen in place."
 	}
 
 	"Hider Unfreezed"
