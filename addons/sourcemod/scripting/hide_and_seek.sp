@@ -54,6 +54,10 @@ new g_Render;
 new g_Radar;
 new g_Bomb;
 new g_Freeze;
+new g_iHasNightVision;
+new g_flLaggedMovementValue;
+new g_flProgressBarStartTime;
+new g_iProgressBarDuration;
 
 new bool:g_InThirdPersonView[MAXPLAYERS+2] = {false,...};
 new bool:g_IsFreezed[MAXPLAYERS+2] = {false,...};
@@ -180,6 +184,7 @@ public OnPluginStart()
 		HookEvent("round_start", Event_OnRoundStart);
 		HookEvent("round_end", Event_OnRoundEnd);
 		HookEvent("player_team", Event_OnPlayerTeam);
+		HookEvent("item_pickup", Event_OnItemPickup);
 	}
 	
 	// Register console commands
@@ -249,6 +254,18 @@ public OnPluginStart()
 	g_Freeze = FindSendPropOffs("CBasePlayer", "m_fFlags");
 	if(g_Freeze == -1)
 		SetFailState("Couldnt find the m_fFlags offset!");
+	g_iHasNightVision = FindSendPropOffs("CCSPlayer", "m_bHasNightVision");
+	if(g_iHasNightVision == -1)
+		SetFailState("Couldnt find the m_bHasNightVision offset!");
+	g_flLaggedMovementValue = FindSendPropOffs("CCSPlayer", "m_flLaggedMovementValue");
+	if(g_flLaggedMovementValue == -1)
+		SetFailState("Couldnt find the m_flLaggedMovementValue offset!");
+	g_flProgressBarStartTime = FindSendPropOffs("CCSPlayer", "m_flProgressBarStartTime");
+	if(g_flProgressBarStartTime == -1)
+		SetFailState("Couldnt find the m_flProgressBarStartTime offset!");
+	g_iProgressBarDuration = FindSendPropOffs("CCSPlayer", "m_iProgressBarDuration");
+	if(g_iProgressBarDuration == -1)
+		SetFailState("Couldnt find the m_iProgressBarDuration offset!");
 	
 	
 	AutoExecConfig(true, "plugin.hide_and_seek");
@@ -527,7 +544,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		g_AllowModelChange[client] = true;
 		
 		// set the speed
-		SetEntPropFloat(client, Prop_Data, "m_flLaggedMovementValue", GetConVarFloat(hns_cfg_hidersspeed));
+		SetEntDataFloat(client, g_flLaggedMovementValue, GetConVarFloat(hns_cfg_hidersspeed), true);
 		
 		// reset the transparent
 		if(GetConVarBool(hns_cfg_opacity_enable))
@@ -598,8 +615,8 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 					{
 						if(IsClientInGame(i))
 						{
-							SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", 0.0);
-							SetEntProp(i, Prop_Send, "m_iProgressBarDuration", 0);
+							SetEntDataFloat(i, g_flProgressBarStartTime, 0.0, true);
+							SetEntData(i, g_iProgressBarDuration, 0, 4, true);
 						}
 					}
 				}
@@ -730,7 +747,7 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 				aliveTerrorists = true;
 				
 				// set godmode for the rest of the round
-				SetEntProp(i, Prop_Data, "m_takedamage", 0, 1);
+				SetEntProp(i, Prop_Data, "m_TakeDamage", 0, 1);
 			}
 		}
 		
@@ -828,6 +845,17 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 	CreateTimer(0.1, Timer_ChangeTeam, client, TIMER_FLAG_NO_MAPCHANGE);
 	
 	return Plugin_Handled;
+}
+
+public Event_OnItemPickup(Handle:event, const String:name[], bool:dontBroadcast)
+{
+	new client = GetClientOfUserId(GetEventInt( event, "userid"));
+	decl String:sItem[100];
+	GetEventString(event, "item", sItem, sizeof(sItem));
+	
+	// restrict nightvision
+	if(StrEqual(sItem, "nvgs", false))
+		SetEntData(client, g_iHasNightVision, 0, 4, true);
 }
 
 /*
@@ -985,8 +1013,8 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 			{
 				if(IsClientInGame(i))
 				{
-					SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", 0.0);
-					SetEntProp(i, Prop_Send, "m_iProgressBarDuration", 0);
+					SetEntDataFloat(i, g_flProgressBarStartTime, 0.0, true);
+					SetEntData(i, g_iProgressBarDuration, 0, 4, true);
 				}
 			}
 		}
@@ -1000,8 +1028,8 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 		{
 			if(IsClientInGame(i) && GetEntProp(i, Prop_Send, "m_iProgressBarDuration") == 0)
 			{
-				SetEntPropFloat(i, Prop_Send, "m_flProgressBarStartTime", GetGameTime());
-				SetEntProp(i, Prop_Send, "m_iProgressBarDuration", seconds);
+				SetEntDataFloat(i, g_flProgressBarStartTime, GetGameTime(), true);
+				SetEntData(i, g_iProgressBarDuration, seconds, 4, true);
 			}
 		}
 	}
@@ -1908,7 +1936,7 @@ public OnChangeHiderSpeed(Handle:convar, const String:oldValue[], const String:n
 	for(new i=1;i<=MaxClients;i++)
 	{
 		if(IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == CS_TEAM_T)
-			SetEntPropFloat(i, Prop_Data, "m_flLaggedMovementValue", GetConVarFloat(hns_cfg_hidersspeed));
+			SetEntDataFloat(i, g_flLaggedMovementValue, GetConVarFloat(hns_cfg_hidersspeed), true);
 	}
 }
 
@@ -1963,6 +1991,7 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		UnhookEvent("round_start", Event_OnRoundStart);
 		UnhookEvent("round_end", Event_OnRoundEnd);
 		UnhookEvent("player_team", Event_OnPlayerTeam);
+		UnhookEvent("item_pickup", Event_OnItemPickup);
 		
 		// unprotect the cvars
 		for(new i=0;i<sizeof(protected_cvars);i++)
@@ -2042,6 +2071,7 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		HookEvent("round_start", Event_OnRoundStart);
 		HookEvent("round_end", Event_OnRoundEnd);
 		HookEvent("player_team", Event_OnPlayerTeam);
+		HookEvent("item_pickup", Event_OnItemPickup);
 		
 		// set bad server cvars
 		for(new i=0;i<sizeof(protected_cvars);i++)
