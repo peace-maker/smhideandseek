@@ -222,14 +222,6 @@ public OnPluginStart()
 
 	if(g_EnableHnS)
 	{
-		// set bad server cvars
-		for(new i=0;i<sizeof(protected_cvars);i++)
-		{
-			g_ProtectedConvar[i] = FindConVar(protected_cvars[i]);
-			previous_values[i] = GetConVarInt(g_ProtectedConvar[i]);
-			SetConVarInt(g_ProtectedConvar[i], forced_values[i], true);
-			HookConVarChange(g_ProtectedConvar[i], OnCvarChange);
-		}
 		// start advertising spam
 		g_SpamCommandsTimer = CreateTimer(120.0, SpamCommands, 0);
 	}
@@ -275,6 +267,21 @@ public OnPluginEnd()
 {
 	if(g_EnableHnS)
 		ServerCommand("mp_restartgame 1");
+}
+
+public OnConfigsExecuted()
+{
+	if(g_EnableHnS)
+	{
+		// set bad server cvars
+		for(new i=0;i<sizeof(protected_cvars);i++)
+		{
+			g_ProtectedConvar[i] = FindConVar(protected_cvars[i]);
+			previous_values[i] = GetConVarInt(g_ProtectedConvar[i]);
+			SetConVarInt(g_ProtectedConvar[i], forced_values[i], true);
+			HookConVarChange(g_ProtectedConvar[i], OnCvarChange);
+		}
+	}
 }
 
 /*
@@ -470,6 +477,9 @@ public Hook_PMOnPostThink(entity)
 // set a normal model right before death to avoid errors
 public Action:OnTraceAttack(victim, &attacker, &inflictor, &Float:damage, &damagetype, &ammotype, hitbox, hitgroup)
 {
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
 	if(GetClientTeam(victim) == CS_TEAM_T)
 	{
 		new remainingHealth = GetClientHealth(victim)-RoundToNearest(damage);
@@ -522,6 +532,9 @@ public Action:OnTraceAttack(victim, &attacker, &inflictor, &Float:damage, &damag
 // Player Spawn event
 public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	new team = GetClientTeam(client);
 
@@ -661,8 +674,11 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 // subtract 5hp for every shot a seeker is giving
 public Action:Event_OnWeaponFire(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
 	if(!GetConVarBool(hns_cfg_hp_seeker_enable) || g_RoundEnded)
-		return;
+		return Plugin_Continue;
 	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	new decreaseHP = GetConVarInt(hns_cfg_hp_seeker_dec);
@@ -677,10 +693,14 @@ public Action:Event_OnWeaponFire(Handle:event, const String:name[], bool:dontBro
 	{
 		ForcePlayerSuicide(client);
 	}
+	return Plugin_Continue;
 }
 
 public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
 	g_RoundEnded = false;
 	
 	// remove bombzones and hostages so no normal gameplay could end the round
@@ -700,10 +720,14 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 	// show the roundtime in env_hudhint entity
 	new realRoundTime = RoundToNearest(GetConVarFloat(g_roundTime)*60.0);
 	g_RoundTimeTimer = CreateTimer(1.0, ShowRoundTime, realRoundTime, TIMER_FLAG_NO_MAPCHANGE);
+	return Plugin_Continue;
 }
 // give terrorists frags
 public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
 	// round has ended. used to not decrease seekers hp on shoot
 	g_RoundEnded = true;
 	
@@ -778,6 +802,9 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 // remove ragdolls on death...
 public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	
 	// set the mp_forcecamera value correctly, so he can watch his teammates
@@ -791,13 +818,7 @@ public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBr
 	}
 	
 	if (!IsValidEntity(client) || IsPlayerAlive(client))
-		return;
-	
-	new ragdoll = GetEntPropEnt(client, Prop_Send, "m_hRagdoll");
-	if (ragdoll<0)
-		return;
-	
-	RemoveEdict(ragdoll);
+		return Plugin_Continue;
 	
 	// Unfreeze, if freezed before
 	if(g_IsFreezed[client])
@@ -809,10 +830,21 @@ public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBr
 		
 		g_IsFreezed[client] = false;
 	}
+	
+	new ragdoll = GetEntPropEnt(client, Prop_Send, "m_hRagdoll");
+	if (ragdoll<0)
+		return Plugin_Continue;
+	
+	RemoveEdict(ragdoll);
+	
+	return Plugin_Continue;
 }
 
 public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
 	new team = GetEventInt(event, "team");
 	new bool:disconnect = GetEventBool(event, "disconnect");
@@ -838,17 +870,20 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 		g_iLastJoinedCT = -1;
 	
 	if(GetConVarFloat(hns_cfg_ct_ratio) == 0.0)
-		return Plugin_Handled;
+		return Plugin_Continue;
 	
 	// GetTeamClientCount() doesn't handle the teamchange we're called for in player_team,
 	// so wait one frame to update the counts
 	CreateTimer(0.1, Timer_ChangeTeam, client, TIMER_FLAG_NO_MAPCHANGE);
 	
-	return Plugin_Handled;
+	return Plugin_Continue;
 }
 
 public Event_OnItemPickup(Handle:event, const String:name[], bool:dontBroadcast)
 {
+	if(!g_EnableHnS)
+		return;
+	
 	new client = GetClientOfUserId(GetEventInt( event, "userid"));
 	decl String:sItem[100];
 	GetEventString(event, "item", sItem, sizeof(sItem));
@@ -1917,6 +1952,9 @@ SetRandomModel(client)
 // Monitor the protected cvars and... well protect them ;)
 public OnCvarChange(Handle:convar, const String:oldValue[], const String:newValue[])
 {
+	if(!g_EnableHnS)
+		return;
+	
 	decl String:cvarName[50];
 	GetConVarName(convar, cvarName, sizeof(cvarName));
 	for(new i=0;i<sizeof(protected_cvars);i++)
@@ -1933,6 +1971,9 @@ public OnCvarChange(Handle:convar, const String:oldValue[], const String:newValu
 // directly change the hider speed on change
 public OnChangeHiderSpeed(Handle:convar, const String:oldValue[], const String:newValue[])
 {
+	if(!g_EnableHnS)
+		return;
+	
 	for(new i=1;i<=MaxClients;i++)
 	{
 		if(IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == CS_TEAM_T)
@@ -1943,6 +1984,9 @@ public OnChangeHiderSpeed(Handle:convar, const String:oldValue[], const String:n
 // directly change the hider speed on change
 public OnChangeAntiCheat(Handle:convar, const String:oldValue[], const String:newValue[])
 {
+	if(!g_EnableHnS)
+		return;
+	
 	if(StrEqual(oldValue, newValue))
 		return;
 	
@@ -2050,6 +2094,9 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 			// Unhook weapon pickup
 			SDKUnhook(c, SDKHook_WeaponCanUse, OnWeaponCanUse);
 			
+			// Unhook attacking
+			SDKUnhook(c, SDKHook_TraceAttack, OnTraceAttack);
+			
 			// reset every players vars
 			OnClientDisconnect(c);
 		}
@@ -2097,6 +2144,9 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 			
 			// Hook weapon pickup
 			SDKHook(c, SDKHook_WeaponCanUse, OnWeaponCanUse);
+			
+			// Hook attack to hide blood
+			SDKHook(c, SDKHook_TraceAttack, OnTraceAttack);
 		}
 		
 		g_EnableHnS = true;
