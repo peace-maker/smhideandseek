@@ -63,6 +63,7 @@ new bool:g_InThirdPersonView[MAXPLAYERS+2] = {false,...};
 new bool:g_IsFreezed[MAXPLAYERS+2] = {false,...};
 new Handle:g_RoundTimeTimer = INVALID_HANDLE;
 new Handle:g_roundTime = INVALID_HANDLE;
+new g_iPlayerManager;
 
 new g_FirstCTSpawn = 0;
 new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
@@ -82,6 +83,9 @@ new g_TotalModelsAvailable = 0;
 new g_ModelChangeCount[MAXPLAYERS+2] = {0,...};
 new bool:g_AllowModelChange[MAXPLAYERS+2] = {true,...};
 new Handle:g_AllowModelChangeTimer[MAXPLAYERS+2] = {INVALID_HANDLE,...};
+// Model ground fix
+new Float:g_FixedModelHeight[MAXPLAYERS+2] = {0.0,...};
+new bool:g_bClientIsHigher[MAXPLAYERS+2] = {false,...};
 
 new bool:g_IsCTWaiting[MAXPLAYERS+2] = {false,...};
 new Handle:g_UnfreezeCTTimer[MAXPLAYERS+2] = {INVALID_HANDLE,...};
@@ -218,6 +222,8 @@ public OnPluginStart()
 			g_ConVarViolation[x][y] = false;
 			g_ConVarMessage[x][y] = 0;
 		}
+		if(IsClientInGame(x))
+			OnClientPutInServer(x);
 	}
 
 	if(g_EnableHnS)
@@ -288,7 +294,7 @@ public OnConfigsExecuted()
 * 
 * Generic Events
 * 
-*/ 
+*/
 public OnMapStart()
 {
 	if(!g_EnableHnS)
@@ -340,9 +346,13 @@ public OnMapStart()
 	
 	// Hide players from being shown on the radar.
 	// Thanks to javalia @ alliedmods.net
-	new iPlayerManager = FindEntityByClassname(0, "cs_player_manager");
+	g_iPlayerManager = FindEntityByClassname(0, "cs_player_manager");
 	
-	SDKHook(iPlayerManager, SDKHook_PostThink, Hook_PMOnPostThink);
+	SDKHook(g_iPlayerManager, SDKHook_PreThink, Hook_PMOnPostThink);
+	SDKHook(g_iPlayerManager, SDKHook_PreThinkPost, Hook_PMOnPostThink);
+	SDKHook(g_iPlayerManager, SDKHook_Think, Hook_PMOnPostThink);
+	SDKHook(g_iPlayerManager, SDKHook_PostThink, Hook_PMOnPostThink);
+	SDKHook(g_iPlayerManager, SDKHook_PostThinkPost, Hook_PMOnPostThink);
 }
 
 public OnMapEnd()
@@ -373,6 +383,13 @@ public OnClientPutInServer(client)
 	
 	// Hook weapon pickup
 	SDKHook(client, SDKHook_WeaponCanUse, OnWeaponCanUse);
+	
+	// Hide Radar
+	SDKHook(client, SDKHook_PreThink, OnPlayerThink);
+	SDKHook(client, SDKHook_PreThinkPost, OnPlayerThink);
+	SDKHook(client, SDKHook_Think, OnPlayerThink);
+	SDKHook(client, SDKHook_PostThink, OnPlayerThink);
+	SDKHook(client, SDKHook_PostThinkPost, OnPlayerThink);
 	
 	// Hook attackings to hide blood
 	SDKHook(client, SDKHook_TraceAttack, OnTraceAttack);
@@ -416,6 +433,9 @@ public OnClientDisconnect(client)
 	g_AllowModelChange[client] = true;
 	g_FirstSpawn[client] = true;
 	
+	g_bClientIsHigher[client] = false;
+	g_FixedModelHeight[client] = 0.0;
+	
 	/*if (g_CheckVarTimer[client] != INVALID_HANDLE)
 	{
 		KillTimer(g_CheckVarTimer[client]);
@@ -443,6 +463,43 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		buttons &= ~IN_ATTACK2;
 	}
 	
+	// Modelfix
+	if(g_FixedModelHeight[client] != 0.0 && IsPlayerAlive(client) && GetClientTeam(client) == CS_TEAM_T)
+	{
+		if(!(buttons & IN_FORWARD || buttons & IN_BACK || buttons & IN_MOVELEFT || buttons & IN_MOVERIGHT || buttons & IN_JUMP))
+		{
+			new iGroundEntity = GetEntPropEnt(client, Prop_Send, "m_hGroundEntity");
+			if(iGroundEntity != -1 && !g_bClientIsHigher[client])
+			{
+				new Float:vecClientOrigin[3];
+				GetClientAbsOrigin(client, vecClientOrigin);
+				vecClientOrigin[2] += g_FixedModelHeight[client];
+				TeleportEntity(client, vecClientOrigin, NULL_VECTOR, Float:{0.0,0.0,0.0});
+				SetEntityMoveType(client, MOVETYPE_NONE);
+				g_bClientIsHigher[client] = true;
+			}
+		}
+		else
+		{
+			if(g_bClientIsHigher[client])
+			{
+				new Float:vecClientOrigin[3];
+				GetClientAbsOrigin(client, vecClientOrigin);
+				vecClientOrigin[2] -= g_FixedModelHeight[client];
+				TeleportEntity(client, vecClientOrigin, NULL_VECTOR, NULL_VECTOR);
+				SetEntityMoveType(client, MOVETYPE_WALK);
+				g_bClientIsHigher[client] = false;
+			}
+		}
+		
+		// Always disable ducking for that kind of models.
+		if(buttons & IN_DUCK)
+		{
+			buttons &= ~IN_DUCK;
+			return Plugin_Changed;
+		}
+	}
+	
 	// disable ducking for everyone
 	if(buttons & IN_DUCK && GetConVarBool(hns_cfg_disable_ducking))
 		buttons &= ~IN_DUCK;
@@ -466,10 +523,22 @@ public Hook_PMOnPostThink(entity)
 	if(g_EnableHnS)
 	{
 		// hide players on radar
-		for(new target = 1; target < 65; target++){
+		for(new target = 0; target <= 65; target++){
 			SetEntData(entity, g_Radar + target, 0, 4, true);
 		}
 		SetEntData(entity, g_Bomb, 0, 4, true);
+	}
+}
+
+public OnPlayerThink(entity)
+{
+	if(g_EnableHnS)
+	{
+		// hide players on radar
+		for(new target = 0; target <= 65; target++){
+			SetEntData(g_iPlayerManager, g_Radar + target, 0, 4, true);
+		}
+		SetEntData(g_iPlayerManager, g_Bomb, 0, 4, true);
 	}
 }
 
@@ -555,6 +624,10 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			g_AllowModelChangeTimer[client] = INVALID_HANDLE;
 		}
 		g_AllowModelChange[client] = true;
+		
+		// Reset model fix height
+		g_FixedModelHeight[client] = 0.0;
+		g_bClientIsHigher[client] = false;
 		
 		// set the speed
 		SetEntDataFloat(client, g_flLaggedMovementValue, GetConVarFloat(hns_cfg_hidersspeed), true);
@@ -771,7 +844,7 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 				aliveTerrorists = true;
 				
 				// set godmode for the rest of the round
-				SetEntProp(i, Prop_Data, "m_TakeDamage", 0, 1);
+				SetEntProp(i, Prop_Data, "m_takedamage", 0, 1);
 			}
 		}
 		
@@ -806,6 +879,14 @@ public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBr
 		return Plugin_Continue;
 	
 	new client = GetClientOfUserId(GetEventInt(event, "userid"));
+	
+	if(g_FixedModelHeight[client] != 0.0 && g_bClientIsHigher[client])
+	{
+		SetEntityMoveType(client, MOVETYPE_WALK);
+		g_bClientIsHigher[client] = false;
+	}
+	g_FixedModelHeight[client] = 0.0;
+	g_bClientIsHigher[client] = false;
 	
 	// set the mp_forcecamera value correctly, so he can watch his teammates
 	// This doesn't work. Even if the convar is set to 0, the hiders are only able to spectate their teammates..
@@ -851,7 +932,7 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 	
 	// Handle the thirdperson view values
 	// terrors are always allowed to view players in thirdperson
-	if(!IsFakeClient(client) && GetConVarInt(g_forceCamera) == 1)
+	if(client && !IsFakeClient(client) && GetConVarInt(g_forceCamera) == 1)
 	{
 		if(team == CS_TEAM_T)
 			SendConVarValue(client, g_forceCamera, "0");
@@ -1159,7 +1240,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 					g_bCTToSwitch[i] = false;
 					iCTCount++;
 					iTCount--;
-					PrintToChatAll("HnS: %N will no longer be switched to the hider team at the end of the round.", client);
+					PrintToChatAll("%s%N will no longer be switched to the hider team at the end of the round.", PREFIX, client);
 					
 					// switched enough players?
 					if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
@@ -1175,7 +1256,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 			iCTCount--;
 			iTCount++;
 			ChangeClientTeam(client, CS_TEAM_T);
-			PrintToChatAll("HnS: %N has been switched to hider team. Last change", client);
+			PrintToChatAll("%s%N has been switched to hider team. Last change", PREFIX, client);
 			
 			// switched enough players?
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
@@ -1190,14 +1271,14 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 				iCTCount--;
 				iTCount++;
 				ChangeClientTeam(g_iLastJoinedCT, CS_TEAM_T);
-				PrintToChatAll("HnS: %N has been switched to hider team. Last Joined", g_iLastJoinedCT);
+				PrintToChatAll("%s%N has been switched to hider team. Last Joined", PREFIX, g_iLastJoinedCT);
 			}
 			else if(IsClientInGame(g_iLastJoinedCT))
 			{
 				iCTCount--;
 				iTCount++;
 				g_bCTToSwitch[g_iLastJoinedCT] = true;
-				PrintToChatAll("HnS: %N will be switched to the hider team at the end of the round. Last Joined", g_iLastJoinedCT);
+				PrintToChatAll("%s%N will be switched to the hider team at the end of the round. Last Joined", PREFIX, g_iLastJoinedCT);
 			}
 			
 			// switched enough players?
@@ -1219,7 +1300,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 				iCTCount--;
 				iTCount++;
 				ChangeClientTeam(i, CS_TEAM_T);
-				PrintToChatAll("HnS: %N has been switched to hider team. Dead CT", i);
+				PrintToChatAll("%s%N has been switched to hider team. Dead CT", PREFIX, i);
 			}
 		}
 		
@@ -1235,7 +1316,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 				iCTCount--;
 				iTCount++;
 				g_bCTToSwitch[i] = true;
-				PrintToChatAll("HnS: %N will be switched to the hider team at the end of the round. Alive CT", i);
+				PrintToChatAll("%s%N will be switched to the hider team at the end of the round. Alive CT", PREFIX, i);
 			}
 		}
 	}
@@ -1595,11 +1676,26 @@ public Menu_Group(Handle:menu, MenuAction:action, client, param2)
 	{
 		if (action == MenuAction_Select)
 		{
-			decl String:info[100], String:info2[100];
+			decl String:info[100], String:info2[100], String:sModelPath[100];
 			new bool:found = GetMenuItem(menu, param2, info, sizeof(info), _, info2, sizeof(info2));
 			if(found)
 			{
-				SetEntityModel(client, info);
+				// Modelheight fix
+				new iPosition;
+				if((iPosition = StrContains(info, "||")) != -1)
+				{
+					g_FixedModelHeight[client] = StringToFloat(info[iPosition+2]);
+					PrintToChat(client, "This model is bugged and uses a fixed height set. (%f)", g_FixedModelHeight[client]);
+				}
+				else
+				{
+					g_FixedModelHeight[client]= 0.0;
+				}
+				
+				if(SplitString(info, "||", sModelPath, sizeof(sModelPath)) == -1)
+					strcopy(sModelPath, sizeof(sModelPath), info);
+				
+				SetEntityModel(client, sModelPath);
 				PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", info2);
 				g_ModelChangeCount[client]++;
 			}
@@ -1751,6 +1847,14 @@ BuildMainMenu()
 		KvGetSectionName(kv, path, sizeof(path));
 		FormatEx(finalOutput, sizeof(finalOutput), "models/%s.mdl", path);
 		PrecacheModel(finalOutput, true);
+		
+		// Check for heightfixed models
+		decl String:sHeightFix[32];
+		KvGetString(kv, "heightfix", sHeightFix, sizeof(sHeightFix), "noo");
+		if(!StrEqual(sHeightFix, "noo"))
+		{
+			Format(finalOutput, sizeof(finalOutput), "%s||%s", finalOutput, sHeightFix);
+		}
 		
 		// roll through all available languages
 		for(new i=0;i<GetLanguageCount();i++)
@@ -1908,7 +2012,7 @@ PerformBlind(client, amount)
 SetRandomModel(client)
 {
 	// give him a random one.
-	decl String:ModelPath[80], String:finalPath[100], String:ModelName[60], String:langCode[4];
+	decl String:ModelPath[80], String:finalPath[100], String:ModelName[60], String:langCode[4], String:sHeightFix[35];
 	new RandomNumber = GetRandomInt(0, g_TotalModelsAvailable-1);	
 	new currentI = 0;
 	KvGotoFirstSubKey(kv);
@@ -1920,7 +2024,19 @@ SetRandomModel(client)
 			KvGetSectionName(kv, ModelPath, sizeof(ModelPath));
 			
 			FormatEx(finalPath, sizeof(finalPath), "models/%s.mdl", ModelPath);
+			
 			SetEntityModel(client, finalPath);
+			
+			// Check for heightfixed models
+			KvGetString(kv, "heightfix", sHeightFix, sizeof(sHeightFix), "noo");
+			if(!StrEqual(sHeightFix, "noo"))
+			{
+				g_FixedModelHeight[client] = StringToFloat(sHeightFix);
+			}
+			else
+			{
+				g_FixedModelHeight[client] = 0.0;
+			}
 			
 			if(!IsFakeClient(client))
 			{
@@ -2094,6 +2210,13 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 			// Unhook weapon pickup
 			SDKUnhook(c, SDKHook_WeaponCanUse, OnWeaponCanUse);
 			
+			// Hide Radar
+			SDKUnhook(c, SDKHook_PreThink, OnPlayerThink);
+			SDKUnhook(c, SDKHook_PreThinkPost, OnPlayerThink);
+			SDKUnhook(c, SDKHook_Think, OnPlayerThink);
+			SDKUnhook(c, SDKHook_PostThink, OnPlayerThink);
+			SDKUnhook(c, SDKHook_PostThinkPost, OnPlayerThink);
+			
 			// Unhook attacking
 			SDKUnhook(c, SDKHook_TraceAttack, OnTraceAttack);
 			
@@ -2144,6 +2267,13 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 			
 			// Hook weapon pickup
 			SDKHook(c, SDKHook_WeaponCanUse, OnWeaponCanUse);
+			
+			// Hide Radar
+			SDKHook(c, SDKHook_PreThink, OnPlayerThink);
+			SDKHook(c, SDKHook_PreThinkPost, OnPlayerThink);
+			SDKHook(c, SDKHook_Think, OnPlayerThink);
+			SDKHook(c, SDKHook_PostThink, OnPlayerThink);
+			SDKHook(c, SDKHook_PostThinkPost, OnPlayerThink);
 			
 			// Hook attack to hide blood
 			SDKHook(c, SDKHook_TraceAttack, OnTraceAttack);
