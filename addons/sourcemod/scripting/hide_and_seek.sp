@@ -40,6 +40,7 @@ new Handle:hns_cfg_hide_blood = INVALID_HANDLE;
 new Handle:hns_cfg_show_hidehelp = INVALID_HANDLE;
 new Handle:hns_cfg_show_progressbar = INVALID_HANDLE;
 new Handle:hns_cfg_ct_ratio = INVALID_HANDLE;
+new Handle:hns_cfg_disable_use = INVALID_HANDLE;
 
 // primary enableswitch
 new bool:g_EnableHnS = true;
@@ -58,11 +59,13 @@ new g_iHasNightVision;
 new g_flLaggedMovementValue;
 new g_flProgressBarStartTime;
 new g_iProgressBarDuration;
+new g_iAccount;
 
 new bool:g_InThirdPersonView[MAXPLAYERS+2] = {false,...};
 new bool:g_IsFreezed[MAXPLAYERS+2] = {false,...};
 new Handle:g_RoundTimeTimer = INVALID_HANDLE;
 new Handle:g_roundTime = INVALID_HANDLE;
+new g_iRoundStartTime = 0;
 new g_iPlayerManager;
 
 new g_FirstCTSpawn = 0;
@@ -86,6 +89,7 @@ new Handle:g_AllowModelChangeTimer[MAXPLAYERS+2] = {INVALID_HANDLE,...};
 // Model ground fix
 new Float:g_FixedModelHeight[MAXPLAYERS+2] = {0.0,...};
 new bool:g_bClientIsHigher[MAXPLAYERS+2] = {false,...};
+new g_iLowModelSteps[MAXPLAYERS+2] = {0,...};
 
 new bool:g_IsCTWaiting[MAXPLAYERS+2] = {false,...};
 new Handle:g_UnfreezeCTTimer[MAXPLAYERS+2] = {INVALID_HANDLE,...};
@@ -96,24 +100,24 @@ new String:protected_cvars[][] = {"mp_flashlight",
 								  "mp_limitteams", 
 								  "mp_autoteambalance", 
 								  "mp_freezetime", 
-								  "sv_alltalk", 
 								  "sv_nonemesis", 
 								  "sv_nomvp", 
 								  "sv_nostats", 
 								  "mp_playerid",
-								  "sv_allowminmodels"
+								  "sv_allowminmodels",
+								  "sv_turbophysics"
 								 };
 new forced_values[] = {0, // mp_flashlight
 					   0, // sv_footsteps
 					   0, // mp_limitteams
 					   0, // mp_autoteambalance
 					   0, // mp_freezetime
-					   1, // sv_alltalk
 					   1, // sv_nonemesis
 					   1, // sv_nomvp
 					   1, // sv_nostats
 					   1, // mp_playerid
-					   0 // sv_allowminmodels
+					   0, // sv_allowminmodels
+					   1 // sv_turbophysics
 					  };
 new previous_values[11] = {0,...}; // save previous values when forcing above, so we can restore the config if hns is disabled midgame. !same as comment next line!
 new Handle:g_ProtectedConvar[11] = {INVALID_HANDLE,...}; // 11 = amount of protected_cvars. update if you add one.
@@ -163,13 +167,14 @@ public OnPluginStart()
 	hns_cfg_opacity_enable = 	CreateConVar("sm_hns_opacity_enable", "0", "Should T get more invisible on low hp, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_hidersspeed  = 		CreateConVar("sm_hns_hidersspeed", "1.00", "Hiders speed (Default: 1.00).", FCVAR_PLUGIN, true, 1.00, true, 3.00);
 	hns_cfg_disable_rightknife =CreateConVar("sm_hns_disable_rightknife", "1", "Disable rightclick for CTs with knife? Prevents knifing without losing heatlh. (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
-	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "0", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "1", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_hider_freeze_mode =	CreateConVar("sm_hns_hider_freeze_mode", "2", "0: Disables /freeze command for hiders, 1: Only freeze on position, be able to move camera, 2: Freeze completely (no cameramovents) (Default: 2)", FCVAR_PLUGIN, true, 0.00, true, 2.00);
 	hns_cfg_hide_blood =		CreateConVar("sm_hns_hide_blood", "1", "Hide blood on hider damage. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_show_hidehelp =		CreateConVar("sm_hns_show_hidehelp", "1", "Show helpmenu explaining the game on first player spawn. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_show_progressbar =	CreateConVar("sm_hns_show_progressbar", "1", "Show progressbar for last 15 seconds of freezetime. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_ct_ratio =			CreateConVar("sm_hns_ct_ratio", "3", "The ratio of hiders to 1 seeker. 0 to disables teambalance. (Default: 3:1)", FCVAR_PLUGIN, true, 1.00, true, 64.00);
+	hns_cfg_disable_use =		CreateConVar("sm_hns_disable_use", "1", "Disable CTs pushing things. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_EnableHnS = GetConVarBool(hns_cfg_enable);
 	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
@@ -264,6 +269,9 @@ public OnPluginStart()
 	g_iProgressBarDuration = FindSendPropOffs("CCSPlayer", "m_iProgressBarDuration");
 	if(g_iProgressBarDuration == -1)
 		SetFailState("Couldnt find the m_iProgressBarDuration offset!");
+	g_iAccount = FindSendPropOffs("CCSPlayer", "m_iAccount");
+	if(g_iAccount == -1)
+		SetFailState("Couldnt find the m_iAccount offset!");
 	
 	
 	AutoExecConfig(true, "plugin.hide_and_seek");
@@ -435,6 +443,7 @@ public OnClientDisconnect(client)
 	
 	g_bClientIsHigher[client] = false;
 	g_FixedModelHeight[client] = 0.0;
+	g_iLowModelSteps[client] = 0;
 	
 	/*if (g_CheckVarTimer[client] != INVALID_HANDLE)
 	{
@@ -448,6 +457,8 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 {
 	if(!g_EnableHnS)
 		return Plugin_Continue;
+	
+	new iInitialButtons = buttons;
 	
 	decl String:weaponName[30];
 	// don't allow ct's to shoot in the beginning of the round
@@ -466,7 +477,12 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 	// Modelfix
 	if(g_FixedModelHeight[client] != 0.0 && IsPlayerAlive(client) && GetClientTeam(client) == CS_TEAM_T)
 	{
-		if(!(buttons & IN_FORWARD || buttons & IN_BACK || buttons & IN_MOVELEFT || buttons & IN_MOVERIGHT || buttons & IN_JUMP))
+		new Float:vecVelocity[3];
+		vecVelocity[0] = GetEntPropFloat(client, Prop_Send, "m_vecVelocity[0]");
+		vecVelocity[1] = GetEntPropFloat(client, Prop_Send, "m_vecVelocity[1]");
+		vecVelocity[2] = GetEntPropFloat(client, Prop_Send, "m_vecVelocity[2]");
+		// Player isn't moving
+		if(vecVelocity[0] == 0.0 && vecVelocity[1] == 0.0 && vecVelocity[2] == 0.0 && !(buttons & IN_FORWARD || buttons & IN_BACK || buttons & IN_MOVELEFT || buttons & IN_MOVERIGHT || buttons & IN_JUMP))
 		{
 			new iGroundEntity = GetEntPropEnt(client, Prop_Send, "m_hGroundEntity");
 			if(iGroundEntity != -1 && !g_bClientIsHigher[client])
@@ -474,11 +490,26 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 				new Float:vecClientOrigin[3];
 				GetClientAbsOrigin(client, vecClientOrigin);
 				vecClientOrigin[2] += g_FixedModelHeight[client];
-				TeleportEntity(client, vecClientOrigin, NULL_VECTOR, Float:{0.0,0.0,0.0});
+				TeleportEntity(client, vecClientOrigin, NULL_VECTOR, NULL_VECTOR);
 				SetEntityMoveType(client, MOVETYPE_NONE);
 				g_bClientIsHigher[client] = true;
+				g_iLowModelSteps[client] = 0;
 			}
 		}
+		// Player is running for 60 thinks? make him visible for a short time
+		else if(g_iLowModelSteps[client] == 60)
+		{
+			new iGroundEntity = GetEntPropEnt(client, Prop_Send, "m_hGroundEntity");
+			if(iGroundEntity != -1 && !g_bClientIsHigher[client])
+			{
+				new Float:vecClientOrigin[3];
+				GetClientAbsOrigin(client, vecClientOrigin);
+				vecClientOrigin[2] += g_FixedModelHeight[client];
+				TeleportEntity(client, vecClientOrigin, NULL_VECTOR, NULL_VECTOR);
+			}
+			g_iLowModelSteps[client] = 0;
+		}
+		// Player is moving
 		else
 		{
 			if(g_bClientIsHigher[client])
@@ -490,13 +521,13 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 				SetEntityMoveType(client, MOVETYPE_WALK);
 				g_bClientIsHigher[client] = false;
 			}
+			g_iLowModelSteps[client]++;
 		}
 		
 		// Always disable ducking for that kind of models.
 		if(buttons & IN_DUCK)
 		{
 			buttons &= ~IN_DUCK;
-			return Plugin_Changed;
 		}
 	}
 	
@@ -504,7 +535,14 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 	if(buttons & IN_DUCK && GetConVarBool(hns_cfg_disable_ducking))
 		buttons &= ~IN_DUCK;
 	
-	return Plugin_Continue;
+	// disable use for everyone
+	if(GetConVarBool(hns_cfg_disable_use) && buttons & IN_USE)
+		buttons &= ~IN_USE;
+	
+	if(iInitialButtons != buttons)
+		return Plugin_Changed;
+	else
+		return Plugin_Continue;
 }
 
 // SDKHook Callbacks
@@ -551,7 +589,7 @@ public Action:OnTraceAttack(victim, &attacker, &inflictor, &Float:damage, &damag
 	
 	if(GetClientTeam(victim) == CS_TEAM_T)
 	{
-		new remainingHealth = GetClientHealth(victim)-RoundToNearest(damage);
+		new remainingHealth = GetClientHealth(victim)-RoundToFloor(damage);
 		
 		// Attacker is a human?
 		if(GetConVarBool(hns_cfg_hp_seeker_enable) && attacker > 0 && attacker <= MaxClients && IsPlayerAlive(attacker))
@@ -733,6 +771,9 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			g_IsCTWaiting[client] = true;
 		}
 		
+		// Give full money
+		SetEntData(client, g_iAccount, 16000, 4, true);
+		
 		// show help menu on first spawn
 		if(GetConVarBool(hns_cfg_show_hidehelp) && g_FirstSpawn[client])
 		{
@@ -776,23 +817,33 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 	
 	g_RoundEnded = false;
 	
-	// remove bombzones and hostages so no normal gameplay could end the round
+	// When disabling +use or "e" button open all doors on the map and keep them opened.
+	new bool:bUse = GetConVarBool(hns_cfg_disable_use);
+	
 	new maxent = GetMaxEntities(), String:eName[64];
 	for (new i=MaxClients;i<maxent;i++)
 	{
 		if ( IsValidEdict(i) && IsValidEntity(i) )
 		{
 			GetEdictClassname(i, eName, sizeof(eName));
-			if ( StrContains(eName, "hostage_entity") != -1 || StrContains(eName, "func_bomb_target") != -1 )
+			// remove bombzones and hostages so no normal gameplay could end the round
+			if ( StrContains(eName, "hostage_entity") != -1 || StrContains(eName, "func_bomb_target") != -1  || (StrContains(eName, "func_buyzone") != -1 && GetEntProp(i, Prop_Data, "m_iTeamNum", 4) == CS_TEAM_T))
 			{
 				RemoveEdict(i);
+			}
+			// Open all doors
+			else if(bUse && StrContains(eName, "_door", false) != -1)
+			{
+				AcceptEntityInput(i, "Open");
+				HookSingleEntityOutput(i, "OnClose", EntOutput_OnClose);
 			}
 		}
 	}
 	
 	// show the roundtime in env_hudhint entity
+	g_iRoundStartTime = GetTime();
 	new realRoundTime = RoundToNearest(GetConVarFloat(g_roundTime)*60.0);
-	g_RoundTimeTimer = CreateTimer(1.0, ShowRoundTime, realRoundTime, TIMER_FLAG_NO_MAPCHANGE);
+	g_RoundTimeTimer = CreateTimer(0.5, ShowRoundTime, realRoundTime, TIMER_FLAG_NO_MAPCHANGE);
 	return Plugin_Continue;
 }
 // give terrorists frags
@@ -940,9 +991,6 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 			SendConVarValue(client, g_forceCamera, "1");
 	}
 	
-	if(GetConVarFloat(hns_cfg_ct_ratio) == 0.0)
-		return Plugin_Continue;
-	
 	// Player disconnected or joined spectator?
 	if(disconnect || (team != CS_TEAM_CT && team != CS_TEAM_T))
 		g_bCTToSwitch[client] = false;
@@ -972,6 +1020,11 @@ public Event_OnItemPickup(Handle:event, const String:name[], bool:dontBroadcast)
 	// restrict nightvision
 	if(StrEqual(sItem, "nvgs", false))
 		SetEntData(client, g_iHasNightVision, 0, 4, true);
+}
+
+public EntOutput_OnClose(const String:output[], caller, activator, Float:delay)
+{
+	AcceptEntityInput(caller, "Open");
 }
 
 /*
@@ -1116,11 +1169,11 @@ public Action:SpamCommands(Handle:timer, any:data)
 
 // show all players a countdown
 // CT: I'm coming!
-public Action:ShowCountdown(Handle:timer, any:seconds)
+public Action:ShowCountdown(Handle:timer, any:freezeTime)
 {
+	new seconds = freezeTime - GetTime() + g_FirstCTSpawn;
 	PrintCenterTextAll("%d", seconds);
-	seconds--;
-	if(seconds < 0)
+	if(seconds <= 0)
 	{
 		g_ShowCountdownTimer = INVALID_HANDLE;
 		if(GetConVarBool(hns_cfg_show_progressbar))
@@ -1150,14 +1203,16 @@ public Action:ShowCountdown(Handle:timer, any:seconds)
 		}
 	}
 	
-	g_ShowCountdownTimer = CreateTimer(1.0, ShowCountdown, seconds);
+	g_ShowCountdownTimer = CreateTimer(0.5, ShowCountdown, freezeTime);
 	
 	return Plugin_Handled;
 }
 
-public Action:ShowRoundTime(Handle:timer, any:seconds)
+public Action:ShowRoundTime(Handle:timer, any:roundTime)
 {
 	decl String:timeLeft[10];
+	new seconds = roundTime - GetTime() + g_iRoundStartTime;
+	
 	new minutes = RoundToFloor(float(seconds) / 60.0);
 	new secs = seconds - minutes*60;
 	if(secs < 10)
@@ -1174,9 +1229,9 @@ public Action:ShowRoundTime(Handle:timer, any:seconds)
 			EndMessage();
 		}
 	}
-	seconds--;
+	
 	if(seconds > 0)
-		g_RoundTimeTimer = CreateTimer(1.0, ShowRoundTime, seconds, TIMER_FLAG_NO_MAPCHANGE);
+		g_RoundTimeTimer = CreateTimer(0.5, ShowRoundTime, roundTime, TIMER_FLAG_NO_MAPCHANGE);
 	else
 		g_RoundTimeTimer = INVALID_HANDLE;
 	
@@ -1227,6 +1282,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 	
 	new Float:fCFGRatio = FloatDiv(1.0, fCFGCTRatio);
 	
+	decl String:sName[64];
 	// There are more CTs than we want in the CT team and it's not the first CT
 	if(iCTCount != 1 && fRatio > fCFGRatio)
 	{
@@ -1240,7 +1296,8 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 					g_bCTToSwitch[i] = false;
 					iCTCount++;
 					iTCount--;
-					PrintToChatAll("%s%N will no longer be switched to the hider team at the end of the round.", PREFIX, client);
+					GetClientName(i, sName, sizeof(sName));
+					PrintToChatAll("%s%t.", PREFIX, "stop switch", sName);
 					
 					// switched enough players?
 					if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
@@ -1256,7 +1313,8 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 			iCTCount--;
 			iTCount++;
 			ChangeClientTeam(client, CS_TEAM_T);
-			PrintToChatAll("%s%N has been switched to hider team. Last change", PREFIX, client);
+			GetClientName(client, sName, sizeof(sName));
+			PrintToChatAll("%s%t", PREFIX, "switched", sName);
 			
 			// switched enough players?
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
@@ -1271,14 +1329,16 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 				iCTCount--;
 				iTCount++;
 				ChangeClientTeam(g_iLastJoinedCT, CS_TEAM_T);
-				PrintToChatAll("%s%N has been switched to hider team. Last Joined", PREFIX, g_iLastJoinedCT);
+				GetClientName(g_iLastJoinedCT, sName, sizeof(sName));
+				PrintToChatAll("%s%t", PREFIX, "switched", sName);
 			}
 			else if(IsClientInGame(g_iLastJoinedCT))
 			{
 				iCTCount--;
 				iTCount++;
 				g_bCTToSwitch[g_iLastJoinedCT] = true;
-				PrintToChatAll("%s%N will be switched to the hider team at the end of the round. Last Joined", PREFIX, g_iLastJoinedCT);
+				GetClientName(g_iLastJoinedCT, sName, sizeof(sName));
+				PrintToChatAll("%s%t", PREFIX, "going to switch", sName);
 			}
 			
 			// switched enough players?
@@ -1300,7 +1360,8 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 				iCTCount--;
 				iTCount++;
 				ChangeClientTeam(i, CS_TEAM_T);
-				PrintToChatAll("%s%N has been switched to hider team. Dead CT", PREFIX, i);
+				GetClientName(i, sName, sizeof(sName));
+				PrintToChatAll("%s%t", PREFIX, "switched", sName);
 			}
 		}
 		
@@ -1316,7 +1377,8 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 				iCTCount--;
 				iTCount++;
 				g_bCTToSwitch[i] = true;
-				PrintToChatAll("%s%N will be switched to the hider team at the end of the round. Alive CT", PREFIX, i);
+				GetClientName(i, sName, sizeof(sName));
+				PrintToChatAll("%s%t", PREFIX, "going to switch", sName);
 			}
 		}
 	}

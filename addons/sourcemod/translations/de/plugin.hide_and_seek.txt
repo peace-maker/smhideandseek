@@ -211,5 +211,16 @@
 	{
 		"de"			"Friert den Spieler ein."
 	}
-
+	"going to switch"
+	{
+		"de"			"{1} wird am Ende der Runde in das Versteckerteam verschoben."
+	}
+	"stop switch"
+	{
+		"de"			"{1} wird nicht mehr am Ende der Runde in das Versteckerteam verschoben."
+	}
+	"switched"
+	{
+		"de"			"{1} wurde in das Versteckerteam verschoben."
+	}
 }

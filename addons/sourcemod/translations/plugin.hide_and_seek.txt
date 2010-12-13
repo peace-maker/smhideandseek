@@ -210,11 +210,26 @@
 
 	"cmd freeze"
 	{
-		"en"			"Freezes the hider on place."
+		"en"			"Freezes the hider in place."
 	}
 
 	"cmd hidehelp"
 	{
 		"en"			"Displays this help menu."
+	}
+	"going to switch"
+	{
+		"#format"		"{1:s}"
+		"en"			"{1} will be switched to the hider team at the end of the round."
+	}
+	"stop switch"
+	{
+		"#format"		"{1:s}"
+		"en"			"{1} will no longer be switched to the hider team at the end of the round."
+	}
+	"switched"
+	{
+		"#format"		"{1:s}"
+		"en"			"{1} has been switched to hider team."
 	}
 }
