@@ -41,6 +41,7 @@ new Handle:hns_cfg_show_hidehelp = INVALID_HANDLE;
 new Handle:hns_cfg_show_progressbar = INVALID_HANDLE;
 new Handle:hns_cfg_ct_ratio = INVALID_HANDLE;
 new Handle:hns_cfg_disable_use = INVALID_HANDLE;
+new Handle:hns_cfg_hider_freeze_inair = INVALID_HANDLE;
 
 // primary enableswitch
 new bool:g_EnableHnS = true;
@@ -175,6 +176,7 @@ public OnPluginStart()
 	hns_cfg_show_progressbar =	CreateConVar("sm_hns_show_progressbar", "1", "Show progressbar for last 15 seconds of freezetime. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_ct_ratio =			CreateConVar("sm_hns_ct_ratio", "3", "The ratio of hiders to 1 seeker. 0 to disables teambalance. (Default: 3:1)", FCVAR_PLUGIN, true, 1.00, true, 64.00);
 	hns_cfg_disable_use =		CreateConVar("sm_hns_disable_use", "1", "Disable CTs pushing things. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_hider_freeze_inair =CreateConVar("sm_hns_hider_freeze_inair", "0", "Are hiders allowed to freeze in the air? (Default: 0)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_EnableHnS = GetConVarBool(hns_cfg_enable);
 	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
@@ -958,7 +960,10 @@ public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBr
 		if(GetConVarInt(hns_cfg_hider_freeze_mode) == 1)
 			SetEntityMoveType(client, MOVETYPE_WALK);
 		else
+		{
 			SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
+			SetEntityMoveType(client, MOVETYPE_WALK);
+		}
 		
 		g_IsFreezed[client] = false;
 	}
@@ -1643,17 +1648,23 @@ public Action:Freeze_Cmd(client,args)
 		if(GetConVarInt(hns_cfg_hider_freeze_mode) == 1)
 			SetEntityMoveType(client, MOVETYPE_WALK);
 		else
+		{
 			SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
+			SetEntityMoveType(client, MOVETYPE_WALK);
+		}
 		
 		g_IsFreezed[client] = false;
 		PrintToChat(client, "%s%t", PREFIX, "Hider Unfreezed");
 	}
-	else if (GetEntityFlags(client) & FL_ONGROUND) // only allow freezing when being on the ground!
+	else if (GetConVarBool(hns_cfg_hider_freeze_inair) || GetEntityFlags(client) & FL_ONGROUND) // only allow freezing when being on the ground!
 	{
 		if(GetConVarInt(hns_cfg_hider_freeze_mode) == 1)
 			SetEntityMoveType(client, MOVETYPE_NONE); // Still able to move camera
 		else
+		{
 			SetEntData(client, g_Freeze, FL_CLIENT|FL_ATCONTROLS, 4, true); // Can't move anything
+			SetEntityMoveType(client, MOVETYPE_NONE);
+		}
 		
 		g_IsFreezed[client] = true;
 		PrintToChat(client, "%s%t", PREFIX, "Hider Freezed");
