@@ -1484,7 +1484,7 @@ public Action:Command_JoinTeam(client, args)
 	decl String:text[192];
 	if (!GetCmdArgString(text, sizeof(text)))
 	{
-		return Plugin_Continue;
+		return Plugin_Handled;
 	}
 	
 	StripQuotes(text);
