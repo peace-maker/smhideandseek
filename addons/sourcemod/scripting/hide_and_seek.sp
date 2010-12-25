@@ -5,7 +5,7 @@
 #include <cstrike>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "1.3.1"
+#define PLUGIN_VERSION "1.4.0"
 
 // that's what GetLanguageCount() got me
 #define MAX_LANGUAGES 27
@@ -106,7 +106,8 @@ new String:protected_cvars[][] = {"mp_flashlight",
 								  "sv_nostats", 
 								  "mp_playerid",
 								  "sv_allowminmodels",
-								  "sv_turbophysics"
+								  "sv_turbophysics",
+								  "mp_teams_unbalance_limit"
 								 };
 new forced_values[] = {0, // mp_flashlight
 					   0, // sv_footsteps
@@ -118,10 +119,11 @@ new forced_values[] = {0, // mp_flashlight
 					   1, // sv_nostats
 					   1, // mp_playerid
 					   0, // sv_allowminmodels
-					   1 // sv_turbophysics
+					   1, // sv_turbophysics
+					   0 // mp_teams_unbalance_limit
 					  };
-new previous_values[11] = {0,...}; // save previous values when forcing above, so we can restore the config if hns is disabled midgame. !same as comment next line!
-new Handle:g_ProtectedConvar[11] = {INVALID_HANDLE,...}; // 11 = amount of protected_cvars. update if you add one.
+new previous_values[12] = {0,...}; // save previous values when forcing above, so we can restore the config if hns is disabled midgame. !same as comment next line!
+new Handle:g_ProtectedConvar[12] = {INVALID_HANDLE,...}; // 12 = amount of protected_cvars. update if you add one.
 new Handle:g_forceCamera = INVALID_HANDLE;
 
 // whistle sounds
@@ -168,9 +170,9 @@ public OnPluginStart()
 	hns_cfg_opacity_enable = 	CreateConVar("sm_hns_opacity_enable", "0", "Should T get more invisible on low hp, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_hidersspeed  = 		CreateConVar("sm_hns_hidersspeed", "1.00", "Hiders speed (Default: 1.00).", FCVAR_PLUGIN, true, 1.00, true, 3.00);
 	hns_cfg_disable_rightknife =CreateConVar("sm_hns_disable_rightknife", "1", "Disable rightclick for CTs with knife? Prevents knifing without losing heatlh. (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
-	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "1", "Disable ducking. (Default: 0).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_disable_ducking =	CreateConVar("sm_hns_disable_ducking", "1", "Disable ducking. (Default: 1).", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_auto_thirdperson =	CreateConVar("sm_hns_auto_thirdperson", "1", "Enable thirdperson view for hiders automatically. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
-	hns_cfg_hider_freeze_mode =	CreateConVar("sm_hns_hider_freeze_mode", "2", "0: Disables /freeze command for hiders, 1: Only freeze on position, be able to move camera, 2: Freeze completely (no cameramovents) (Default: 2)", FCVAR_PLUGIN, true, 0.00, true, 2.00);
+	hns_cfg_hider_freeze_mode =	CreateConVar("sm_hns_hider_freeze_mode", "2", "0: Disables /freeze command for hiders, 1: Only freeze on position, be able to move camera, 2: Freeze completely (no cameramovements) (Default: 2)", FCVAR_PLUGIN, true, 0.00, true, 2.00);
 	hns_cfg_hide_blood =		CreateConVar("sm_hns_hide_blood", "1", "Hide blood on hider damage. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_show_hidehelp =		CreateConVar("sm_hns_show_hidehelp", "1", "Show helpmenu explaining the game on first player spawn. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_show_progressbar =	CreateConVar("sm_hns_show_progressbar", "1", "Show progressbar for last 15 seconds of freezetime. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
@@ -201,16 +203,17 @@ public OnPluginStart()
 	// Register console commands
 	RegConsoleCmd("hide", Menu_SelectModel, "Opens a menu with different models to choose as hider.");
 	RegConsoleCmd("hidemenu", Menu_SelectModel, "Opens a menu with different models to choose as hider.");
-	RegConsoleCmd("tp", Third_Person, "Toggles the view to thirdperson for hiders.");
-	RegConsoleCmd("thirdperson", Third_Person, "Toggles the view to thirdperson for hiders.");
-	RegConsoleCmd("third", Third_Person, "Toggles the view to thirdperson for hiders.");
-	RegConsoleCmd("+3rd", Third_Person, "Toggles the view to thirdperson for hiders.");
-	RegConsoleCmd("-3rd", Third_Person, "Toggles the view to thirdperson for hiders.");
+	RegConsoleCmd("tp", Toggle_ThirdPerson, "Toggles the view to thirdperson for hiders.");
+	RegConsoleCmd("thirdperson", Toggle_ThirdPerson, "Toggles the view to thirdperson for hiders.");
+	RegConsoleCmd("third", Toggle_ThirdPerson, "Toggles the view to thirdperson for hiders.");
+	RegConsoleCmd("+3rd", Enable_ThirdPerson, "Set the view to thirdperson for hiders.");
+	RegConsoleCmd("-3rd", Disable_ThirdPerson, "Set the view to firstperson for hiders.");
 	RegConsoleCmd("jointeam", Command_JoinTeam);
 	RegConsoleCmd("whistle", Play_Whistle, "Plays a random sound from the hiders position to give the seekers a hint.");
 	RegConsoleCmd("whoami", Display_ModelName, "Displays the current models description in chat.");
 	RegConsoleCmd("hidehelp", Display_Help, "Displays a panel with informations how to play.");
 	RegConsoleCmd("freeze", Freeze_Cmd, "Toggles freezing for hiders.");
+	RegConsoleCmd("mp_restartgame", RestartGame);
 	
 	RegConsoleCmd("overview_mode", Block_Cmd);
 	
@@ -446,6 +449,10 @@ public OnClientDisconnect(client)
 	g_bClientIsHigher[client] = false;
 	g_FixedModelHeight[client] = 0.0;
 	g_iLowModelSteps[client] = 0;
+	
+	// Teambalancer
+	g_bCTToSwitch[client] = false;
+	CreateTimer(0.1, Timer_ChangeTeam, client, TIMER_FLAG_NO_MAPCHANGE);
 	
 	/*if (g_CheckVarTimer[client] != INVALID_HANDLE)
 	{
@@ -692,7 +699,7 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			
 			// Set them to thirdperson automatically
 			if(GetConVarBool(hns_cfg_auto_thirdperson))
-				Third_Person(client, 2);
+				SetThirdPersonView(client, true);
 			
 			if(GetConVarBool(hns_cfg_autochoose))
 				SetRandomModel(client);
@@ -879,22 +886,24 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 	
 	new winnerTeam = GetEventInt(event, "winner");
 	
-	if(winnerTeam == 2)
+	if(winnerTeam == CS_TEAM_T)
 	{
 		new increaseFrags = GetConVarInt(hns_cfg_hider_win_frags);
 		
-		if(increaseFrags == 0)
-			return Plugin_Continue;
-		
 		new bool:aliveTerrorists = false;
+		new iFrags = 0;
 		// increase playerscore of all alive Terrorists
 		for(new i=1;i<=MaxClients;i++)
 		{
-			if(IsClientInGame(i) && GetClientTeam(i) == CS_TEAM_T && IsPlayerAlive(i))
+			if(IsClientInGame(i) && IsPlayerAlive(i) && GetClientTeam(i) == CS_TEAM_T)
 			{
-				// increase kills by x
-				SetEntProp(i, Prop_Data, "m_iFrags", GetClientFrags(i) + increaseFrags);
-				aliveTerrorists = true;
+				if(increaseFrags > 0)
+				{
+					// increase kills by x
+					iFrags = GetClientFrags(i) + increaseFrags;
+					SetEntProp(i, Prop_Data, "m_iFrags", iFrags, 4);
+					aliveTerrorists = true;
+				}
 				
 				// set godmode for the rest of the round
 				SetEntProp(i, Prop_Data, "m_takedamage", 0, 1);
@@ -1045,6 +1054,7 @@ public Action:FreezePlayer(Handle:timer, any:client)
 		return Plugin_Handled;
 	
 	SetEntData(client, g_Freeze, FL_CLIENT|FL_ATCONTROLS, 4, true);
+	SetEntityMoveType(client, MOVETYPE_NONE);
 	PerformBlind(client, 255);
 	
 	return Plugin_Handled;
@@ -1060,6 +1070,7 @@ public Action:UnFreezePlayer(Handle:timer, any:client)
 		return Plugin_Handled;
 	
 	SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
+	SetEntityMoveType(client, MOVETYPE_WALK);
 	
 	if(!IsConVarCheater(client))
 		PerformBlind(client, 0);
@@ -1253,11 +1264,17 @@ public Action:Timer_AllowWhistle(Handle:timer, any:data)
 
 public Action:Timer_SwitchTeams(Handle:timer, any:data)
 {
+	decl String:sName[64];
 	for(new i=1;i<=MaxClients;i++)
 	{
 		if(g_bCTToSwitch[i])
 		{
-			CS_SwitchTeam(i, CS_TEAM_T);
+			if(IsClientInGame(i))
+			{
+				GetClientName(i, sName, sizeof(sName));
+				CS_SwitchTeam(i, CS_TEAM_T);
+				PrintToChatAll("%s%t", PREFIX, "switched", sName);
+			}
 			g_bCTToSwitch[i] = false;
 		}
 	}
@@ -1280,17 +1297,20 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 			iToBeSwitched++;
 		}
 	}
-	
+	//PrintToServer("Debug: %d players are flagged to switch at the end of the round.", iToBeSwitched);
 	new Float:fRatio = FloatDiv(float(iCTCount), float(iTCount));
 	
 	new Float:fCFGCTRatio = GetConVarFloat(hns_cfg_ct_ratio);
 	
 	new Float:fCFGRatio = FloatDiv(1.0, fCFGCTRatio);
 	
+	//PrintToServer("Debug: Initial CTCount: %d TCount: %d Ratio: %f, CFGRatio: %f", iCTCount, iTCount, fRatio, fCFGRatio);
+	
 	decl String:sName[64];
 	// There are more CTs than we want in the CT team and it's not the first CT
 	if(iCTCount != 1 && fRatio > fCFGRatio)
 	{
+		//PrintToServer("Debug: Too much CTs! Taking action...");
 		// Any players flagged to be moved at the end of the round?
 		if(iToBeSwitched > 0)
 		{
@@ -1304,9 +1324,14 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 					GetClientName(i, sName, sizeof(sName));
 					PrintToChatAll("%s%t.", PREFIX, "stop switch", sName);
 					
+					//PrintToServer("Debug: Unflagged one player from being switched to T. CTCount: %d TCount: %d Ratio: %f", iCTCount, iTCount, FloatDiv(float(iCTCount), float(iTCount)));
+					
 					// switched enough players?
 					if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
+					{
+						//PrintToServer("Debug: Switched enough players after unflagging.");
 						return Plugin_Handled;
+					}
 				}
 			}
 		}
@@ -1321,9 +1346,14 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 			GetClientName(client, sName, sizeof(sName));
 			PrintToChatAll("%s%t", PREFIX, "switched", sName);
 			
+			//PrintToServer("Debug: Switched the player %s straight back to T. CTCount: %d TCount: %d Ratio: %f", sName, iCTCount, iTCount, FloatDiv(float(iCTCount), float(iTCount)));
+			
 			// switched enough players?
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
+			{
+				//PrintToServer("Debug: Switched enough players after reversing the last change.");
 				return Plugin_Handled;
+			}
 		}
 		// Switch last joined CT
 		else if(g_iLastJoinedCT != -1)
@@ -1336,6 +1366,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 				ChangeClientTeam(g_iLastJoinedCT, CS_TEAM_T);
 				GetClientName(g_iLastJoinedCT, sName, sizeof(sName));
 				PrintToChatAll("%s%t", PREFIX, "switched", sName);
+				//PrintToServer("Debug: Switched the last joined CT %s to T. CTCount: %d TCount: %d Ratio: %f", sName, iCTCount, iTCount, FloatDiv(float(iCTCount), float(iTCount)));
 			}
 			else if(IsClientInGame(g_iLastJoinedCT))
 			{
@@ -1344,11 +1375,15 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 				g_bCTToSwitch[g_iLastJoinedCT] = true;
 				GetClientName(g_iLastJoinedCT, sName, sizeof(sName));
 				PrintToChatAll("%s%t", PREFIX, "going to switch", sName);
+				//PrintToServer("Debug: Flagged the last joined CT %s to switch at roundend. CTCount: %d TCount: %d Ratio: %f", sName, iCTCount, iTCount, FloatDiv(float(iCTCount), float(iTCount)));
 			}
 			
 			// switched enough players?
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
+			{
+				//PrintToServer("Debug: Switched enough players after checking the last joined CT.");
 				return Plugin_Handled;
+			}
 		}
 		
 		// First search for a dead seeker, so we can switch him
@@ -1357,16 +1392,20 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 		{
 			// switched enough players?
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
+			{
+				//PrintToServer("Debug: Switched enough players after switching dead cts");
 				return Plugin_Handled;
+			}
 			
 			// Switch one ct to t immediately.
-			if(IsClientInGame(i) && !IsPlayerAlive(i) && GetClientTeam(i) == CS_TEAM_CT)
+			if(IsClientInGame(i) && !IsPlayerAlive(i) && GetClientTeam(i) == CS_TEAM_CT && !g_bCTToSwitch[i])
 			{
 				iCTCount--;
 				iTCount++;
 				ChangeClientTeam(i, CS_TEAM_T);
 				GetClientName(i, sName, sizeof(sName));
 				PrintToChatAll("%s%t", PREFIX, "switched", sName);
+				//PrintToServer("Debug: Switched dead CT %s to T. CTCount: %d TCount: %d Ratio: %f", sName, iCTCount, iTCount, FloatDiv(float(iCTCount), float(iTCount)));
 			}
 		}
 		
@@ -1375,15 +1414,19 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 		{
 			// switched enough players?
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
+			{
+				//PrintToServer("Debug: Switched enough players after flagging alive CTs");
 				return Plugin_Handled;
+			}
 			
-			if(IsClientInGame(i) && GetClientTeam(i) == CS_TEAM_CT)
+			if(IsClientInGame(i) && GetClientTeam(i) == CS_TEAM_CT && !g_bCTToSwitch[i])
 			{
 				iCTCount--;
 				iTCount++;
 				g_bCTToSwitch[i] = true;
 				GetClientName(i, sName, sizeof(sName));
 				PrintToChatAll("%s%t", PREFIX, "going to switch", sName);
+				//PrintToServer("Debug: Flagging alive CT %s to switch to T at roundend. CTCount: %d TCount: %d Ratio: %f", sName, iCTCount, iTCount, FloatDiv(float(iCTCount), float(iTCount)));
 			}
 		}
 	}
@@ -1431,7 +1474,7 @@ public Action:Menu_SelectModel(client,args)
 }
 
 // say /tp /third /thirdperson
-public Action:Third_Person(client, args)
+public Action:Toggle_ThirdPerson(client, args)
 {
 	if (!g_EnableHnS || !IsClientInGame(client) || !IsPlayerAlive(client))
 		return Plugin_Handled;
@@ -1445,23 +1488,60 @@ public Action:Third_Person(client, args)
 	
 	if(!g_InThirdPersonView[client])
 	{
-		SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", 0); 
-		SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
-		SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 0);
-		SetEntProp(client, Prop_Send, "m_iFOV", 120);
-		g_InThirdPersonView[client] = true;
-		// hacky way of not showing the message if autochoose is enabled
-		if(args != 2)
-			PrintToChat(client, "%s%t", PREFIX, "Type again for ego");
+		SetThirdPersonView(client, true);
+		PrintToChat(client, "%s%t", PREFIX, "Type again for ego");
 	}
 	else
 	{
-		SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", -1);
-		SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
-		SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 1);
-		SetEntProp(client, Prop_Send, "m_iFOV", 90);
-		g_InThirdPersonView[client] = false;
-		
+		SetThirdPersonView(client, false);
+		// remove the roundtime message
+		new Handle:hBuffer = StartMessageOne("KeyHintText", client);
+		BfWriteByte(hBuffer, 1);
+		BfWriteString(hBuffer, "");
+		EndMessage();
+	}
+	
+	return Plugin_Handled;
+}
+
+// say /+3rd
+public Action:Enable_ThirdPerson(client, args)
+{
+	if (!g_EnableHnS || !IsClientInGame(client) || !IsPlayerAlive(client))
+		return Plugin_Handled;
+	
+	// Only allow Terrorists to use thirdperson view
+	if(GetClientTeam(client) != CS_TEAM_T)
+	{
+		PrintToChat(client, "%s%t", PREFIX, "Only terrorists can use");
+		return Plugin_Handled;
+	}
+	
+	if(!g_InThirdPersonView[client])
+	{
+		SetThirdPersonView(client, true);
+		PrintToChat(client, "%s%t", PREFIX, "Type again for ego");
+	}
+	
+	return Plugin_Handled;
+}
+
+// say /-3rd
+public Action:Disable_ThirdPerson(client, args)
+{
+	if (!g_EnableHnS || !IsClientInGame(client) || !IsPlayerAlive(client))
+		return Plugin_Handled;
+	
+	// Only allow Terrorists to use thirdperson view
+	if(GetClientTeam(client) != CS_TEAM_T)
+	{
+		PrintToChat(client, "%s%t", PREFIX, "Only terrorists can use");
+		return Plugin_Handled;
+	}
+	
+	if(g_InThirdPersonView[client])
+	{
+		SetThirdPersonView(client, false);
 		// remove the roundtime message
 		new Handle:hBuffer = StartMessageOne("KeyHintText", client);
 		BfWriteByte(hBuffer, 1);
@@ -1498,6 +1578,10 @@ public Action:Command_JoinTeam(client, args)
 		// This client would be in CT if we continue.
 		iCTCount++;
 		
+		// And would leave T
+		if(GetClientTeam(client) == CS_TEAM_T)
+			iTCount--;
+		
 		// Check, how many terrors are going to get switched to ct at the end of the round
 		for(new i=1;i<=MaxClients;i++)
 		{
@@ -1512,10 +1596,13 @@ public Action:Command_JoinTeam(client, args)
 		
 		new Float:fCFGRatio = FloatDiv(1.0, GetConVarFloat(hns_cfg_ct_ratio));
 		
+		//PrintToServer("Debug: Player %N wants to join CT. CTCount: %d TCount: %d Ratio: %f", client, iCTCount, iTCount, FloatDiv(float(iCTCount), float(iTCount)));
+		
 		// There are more CTs than we want in the CT team.
 		if(iCTCount > 1 && fRatio > fCFGRatio)
 		{
 			PrintCenterText(client, "CT team is full");
+			//PrintToServer("Debug: Blocked.");
 			return Plugin_Handled;
 		}
 	}
@@ -1523,6 +1610,39 @@ public Action:Command_JoinTeam(client, args)
 	return Plugin_Continue;
 }
 
+public Action:RestartGame(client, args)
+{
+	if(!g_EnableHnS)
+		return Plugin_Continue;
+	
+	// round has ended. used to not decrease seekers hp on shoot
+	g_RoundEnded = true;
+	
+	g_FirstCTSpawn = 0;
+	
+	if(g_ShowCountdownTimer != INVALID_HANDLE)
+	{
+		KillTimer(g_ShowCountdownTimer);
+		g_ShowCountdownTimer = INVALID_HANDLE;
+	}
+	
+	if(g_RoundTimeTimer != INVALID_HANDLE)
+	{
+		KillTimer(g_RoundTimeTimer);
+		g_RoundTimeTimer = INVALID_HANDLE;
+	}
+	
+	if(g_WhistleDelay != INVALID_HANDLE)
+	{
+		KillTimer(g_WhistleDelay);
+		g_WhistleDelay = INVALID_HANDLE;
+	}
+	
+	// Switch the flagged players to CT
+	CreateTimer(0.1, Timer_SwitchTeams, _, TIMER_FLAG_NO_MAPCHANGE);
+	
+	return Plugin_Continue;
+}
 // say /whistle
 // plays a random sound loudly
 public Action:Play_Whistle(client,args)
@@ -1703,6 +1823,8 @@ public Action:ForceWhistle(client, args)
 	GetCmdArg(1, player, sizeof(player));
 	
 	new target = FindTarget(client, player);
+	if(target == -1)
+		return Plugin_Handled;
 	
 	if(GetClientTeam(target) == CS_TEAM_T && IsPlayerAlive(target))
 	{
@@ -2131,6 +2253,29 @@ SetRandomModel(client)
 		Display_Help(client, 0);
 		g_FirstSpawn[client] = false;
 	}
+}
+
+bool:SetThirdPersonView(client, third)
+{
+	if(third && !g_InThirdPersonView[client])
+	{
+		SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", 0); 
+		SetEntProp(client, Prop_Send, "m_iObserverMode", 1);
+		SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 0);
+		SetEntProp(client, Prop_Send, "m_iFOV", 120);
+		g_InThirdPersonView[client] = true;
+		return true;
+	}
+	else if(!third && g_InThirdPersonView[client])
+	{
+		SetEntPropEnt(client, Prop_Send, "m_hObserverTarget", -1);
+		SetEntProp(client, Prop_Send, "m_iObserverMode", 0);
+		SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 1);
+		SetEntProp(client, Prop_Send, "m_iFOV", 90);
+		g_InThirdPersonView[client] = false;
+		return true;
+	}
+	return false;
 }
 
 /*
