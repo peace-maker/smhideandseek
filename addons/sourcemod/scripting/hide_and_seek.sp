@@ -147,7 +147,9 @@ public Plugin:myinfo =
 
 public OnPluginStart()
 {
-	CreateConVar("sm_hns_version", PLUGIN_VERSION, "Hide and seek", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	new Handle:hVersion = CreateConVar("sm_hns_version", PLUGIN_VERSION, "Hide and seek", FCVAR_PLUGIN|FCVAR_SPONLY|FCVAR_REPLICATED|FCVAR_NOTIFY|FCVAR_DONTRECORD);
+	if(hVersion != INVALID_HANDLE)
+		SetConVarString(hVersion, PLUGIN_VERSION);
 	
 	// Config cvars
 	hns_cfg_enable = 			CreateConVar("sm_hns_enable", "1", "Enable the Hide and Seek Mod?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
@@ -1568,7 +1570,7 @@ public Action:Command_JoinTeam(client, args)
 	decl String:text[192];
 	if (!GetCmdArgString(text, sizeof(text)))
 	{
-		return Plugin_Handled;
+		return Plugin_Continue;
 	}
 	
 	StripQuotes(text);
