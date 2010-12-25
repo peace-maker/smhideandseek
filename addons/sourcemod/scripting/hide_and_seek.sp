@@ -77,7 +77,7 @@ new bool:g_FirstSpawn[MAXPLAYERS+2] = {true,...};
 
 // Cheat cVar part
 new Handle:g_CheckVarTimer[MAXPLAYERS+2] = {INVALID_HANDLE,...};
-new String:cheat_commands[][] = {"r_shadows", "overview_preferred_mode"};
+new String:cheat_commands[][] = {"cl_radaralpha", "r_shadows"};
 new bool:g_ConVarViolation[MAXPLAYERS+2][2]; // 2 = amount of cheat_commands. update if you add one.
 new g_ConVarMessage[MAXPLAYERS+2][2]; // 2 = amount of cheat_commands. update if you add one.
 new Handle:g_CheatPunishTimer[MAXPLAYERS+2] = {INVALID_HANDLE};
@@ -182,6 +182,7 @@ public OnPluginStart()
 	
 	g_EnableHnS = GetConVarBool(hns_cfg_enable);
 	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
+	HookConVarChange(FindConVar("mp_restartgame"), RestartGame);
 	
 	if(g_EnableHnS)
 	{
@@ -213,7 +214,7 @@ public OnPluginStart()
 	RegConsoleCmd("whoami", Display_ModelName, "Displays the current models description in chat.");
 	RegConsoleCmd("hidehelp", Display_Help, "Displays a panel with informations how to play.");
 	RegConsoleCmd("freeze", Freeze_Cmd, "Toggles freezing for hiders.");
-	RegConsoleCmd("mp_restartgame", RestartGame);
+	
 	
 	RegConsoleCmd("overview_mode", Block_Cmd);
 	
@@ -950,6 +951,9 @@ public Action:Event_OnPlayerDeath(Handle:event, const String:name[], bool:dontBr
 	g_FixedModelHeight[client] = 0.0;
 	g_bClientIsHigher[client] = false;
 	
+	// Show guns again.
+	SetThirdPersonView(client, false);
+	
 	// set the mp_forcecamera value correctly, so he can watch his teammates
 	// This doesn't work. Even if the convar is set to 0, the hiders are only able to spectate their teammates..
 	if(GetConVarInt(g_forceCamera) == 1)
@@ -1610,39 +1614,6 @@ public Action:Command_JoinTeam(client, args)
 	return Plugin_Continue;
 }
 
-public Action:RestartGame(client, args)
-{
-	if(!g_EnableHnS)
-		return Plugin_Continue;
-	
-	// round has ended. used to not decrease seekers hp on shoot
-	g_RoundEnded = true;
-	
-	g_FirstCTSpawn = 0;
-	
-	if(g_ShowCountdownTimer != INVALID_HANDLE)
-	{
-		KillTimer(g_ShowCountdownTimer);
-		g_ShowCountdownTimer = INVALID_HANDLE;
-	}
-	
-	if(g_RoundTimeTimer != INVALID_HANDLE)
-	{
-		KillTimer(g_RoundTimeTimer);
-		g_RoundTimeTimer = INVALID_HANDLE;
-	}
-	
-	if(g_WhistleDelay != INVALID_HANDLE)
-	{
-		KillTimer(g_WhistleDelay);
-		g_WhistleDelay = INVALID_HANDLE;
-	}
-	
-	// Switch the flagged players to CT
-	CreateTimer(0.1, Timer_SwitchTeams, _, TIMER_FLAG_NO_MAPCHANGE);
-	
-	return Plugin_Continue;
-}
 // say /whistle
 // plays a random sound loudly
 public Action:Play_Whistle(client,args)
@@ -2349,6 +2320,46 @@ public OnChangeAntiCheat(Handle:convar, const String:oldValue[], const String:ne
 	}
 }
 
+// disable/enable plugin and restart round
+public RestartGame(Handle:convar, const String:oldValue[], const String:newValue[])
+{
+	if(!g_EnableHnS)
+		return;
+	
+	// don't execute if it's unchanged
+	if(StrEqual(oldValue, newValue))
+		return;
+	
+	// disable - it's been enabled before.
+	if(!StrEqual(newValue, "0"))
+	{
+		// round has ended. used to not decrease seekers hp on shoot
+		g_RoundEnded = true;
+		
+		g_FirstCTSpawn = 0;
+		
+		if(g_ShowCountdownTimer != INVALID_HANDLE)
+		{
+			KillTimer(g_ShowCountdownTimer);
+			g_ShowCountdownTimer = INVALID_HANDLE;
+		}
+		
+		if(g_RoundTimeTimer != INVALID_HANDLE)
+		{
+			KillTimer(g_RoundTimeTimer);
+			g_RoundTimeTimer = INVALID_HANDLE;
+		}
+		
+		if(g_WhistleDelay != INVALID_HANDLE)
+		{
+			KillTimer(g_WhistleDelay);
+			g_WhistleDelay = INVALID_HANDLE;
+		}
+		
+		// Switch the flagged players to CT
+		CreateTimer(0.1, Timer_SwitchTeams, _, TIMER_FLAG_NO_MAPCHANGE);
+	}
+}
 // disable/enable plugin and restart round
 public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:newValue[])
 {
