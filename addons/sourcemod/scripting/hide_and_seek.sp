@@ -160,7 +160,7 @@ public OnPluginStart()
 	hns_cfg_autochoose = 		CreateConVar("sm_hns_autochoose", "0", "Should the plugin choose models for the hiders automatically?", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_whistle = 			CreateConVar("sm_hns_whistle", "1", "Are terrorists allowed to whistle?", FCVAR_PLUGIN);
 	hns_cfg_whistle_times = 	CreateConVar("sm_hns_whistle_times", "5", "How many times a hider is allowed to whistle per round?", FCVAR_PLUGIN);
-	hns_cfg_whistle_delay =		CreateConVar("sm_hns_whistle_delay", "25.0", "How long after spawn should we delay the use of whistle?.", FCVAR_PLUGIN, true, 0.00, true, 120.00);
+	hns_cfg_whistle_delay =		CreateConVar("sm_hns_whistle_delay", "25.0", "How long after spawn should we delay the use of whistle? (Default: 25.0)", FCVAR_PLUGIN, true, 0.00, true, 120.00);
 	hns_cfg_anticheat = 		CreateConVar("sm_hns_anticheat", "0", "Check player cheat convars, 0 = off/1 = on.", FCVAR_PLUGIN, true, 0.0, true, 1.0);
 	hns_cfg_cheat_punishment = 	CreateConVar("sm_hns_cheat_punishment", "1", "How to punish players with wrong cvar values after 15 seconds? 0: Disabled. 1: Switch to Spectator. 2: Kick", FCVAR_PLUGIN, true, 0.00, true, 2.00);
 	hns_cfg_hider_win_frags = 	CreateConVar("sm_hns_hider_win_frags", "5", "How many frags should surviving terrorists gain?", FCVAR_PLUGIN, true, 0.00, true, 10.00);
@@ -178,7 +178,7 @@ public OnPluginStart()
 	hns_cfg_hide_blood =		CreateConVar("sm_hns_hide_blood", "1", "Hide blood on hider damage. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_show_hidehelp =		CreateConVar("sm_hns_show_hidehelp", "1", "Show helpmenu explaining the game on first player spawn. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_show_progressbar =	CreateConVar("sm_hns_show_progressbar", "1", "Show progressbar for last 15 seconds of freezetime. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
-	hns_cfg_ct_ratio =			CreateConVar("sm_hns_ct_ratio", "3", "The ratio of hiders to 1 seeker. 0 to disables teambalance. (Default: 3:1)", FCVAR_PLUGIN, true, 1.00, true, 64.00);
+	hns_cfg_ct_ratio =			CreateConVar("sm_hns_ct_ratio", "3", "The ratio of hiders to 1 seeker. 0 to disables teambalance. (Default: 3)", FCVAR_PLUGIN, true, 1.00, true, 64.00);
 	hns_cfg_disable_use =		CreateConVar("sm_hns_disable_use", "1", "Disable CTs pushing things. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_hider_freeze_inair =CreateConVar("sm_hns_hider_freeze_inair", "0", "Are hiders allowed to freeze in the air? (Default: 0)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
@@ -612,12 +612,12 @@ public Action:OnTraceAttack(victim, &attacker, &inflictor, &Float:damage, &damag
 			
 			// the hider died? give extra health! need to add the decreased value again, since he fired his gun and lost hp.
 			// possible "bug": seeker could be slayed because weapon_fire is called earlier than player_hurt.
-			if(remainingHealth <= 0)
+			if(remainingHealth < 0)
 				SetEntityHealth(attacker, GetClientHealth(attacker)+GetConVarInt(hns_cfg_hp_seeker_bonus)+decrease);
 		}
 		
 		// prevent errors in console because of missing death animation of prop ;)
-		if(remainingHealth <= 0)
+		if(remainingHealth < 0)
 		{
 			SetEntityModel(victim, "models/player/t_guerilla.mdl");
 			return Plugin_Continue; // just let the damage get through
@@ -2228,7 +2228,7 @@ SetRandomModel(client)
 	}
 }
 
-bool:SetThirdPersonView(client, third)
+bool:SetThirdPersonView(client, bool:third)
 {
 	if(third && !g_InThirdPersonView[client])
 	{
