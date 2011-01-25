@@ -70,6 +70,7 @@ new g_iRoundStartTime = 0;
 new g_iPlayerManager;
 
 new g_FirstCTSpawn = 0;
+new g_FirstTSpawn = 0;
 new Handle:g_ShowCountdownTimer = INVALID_HANDLE;
 new Handle:g_SpamCommandsTimer = INVALID_HANDLE;
 new bool:g_RoundEnded = false;
@@ -93,6 +94,7 @@ new bool:g_bClientIsHigher[MAXPLAYERS+2] = {false,...};
 new g_iLowModelSteps[MAXPLAYERS+2] = {0,...};
 
 new bool:g_IsCTWaiting[MAXPLAYERS+2] = {false,...};
+new Handle:g_FreezeCTTimer[MAXPLAYERS+2] = {INVALID_HANDLE,...};
 new Handle:g_UnfreezeCTTimer[MAXPLAYERS+2] = {INVALID_HANDLE,...};
 
 // protected server cvars
@@ -324,6 +326,7 @@ public OnMapStart()
 	
 	// prevent us from bugging after mapchange
 	g_FirstCTSpawn = 0;
+	g_FirstTSpawn = 0;
 	
 	if(g_ShowCountdownTimer != INVALID_HANDLE)
 	{
@@ -440,6 +443,11 @@ public OnClientDisconnect(client)
 			KillTimer(g_AllowModelChangeTimer[client]);
 			g_AllowModelChangeTimer[client] = INVALID_HANDLE;
 		}
+		if(g_FreezeCTTimer[client] != INVALID_HANDLE)
+		{
+			KillTimer(g_FreezeCTTimer[client]);
+			g_FreezeCTTimer[client] = INVALID_HANDLE;
+		}
 		if(g_UnfreezeCTTimer[client] != INVALID_HANDLE)
 		{
 			KillTimer(g_UnfreezeCTTimer[client]);
@@ -496,8 +504,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		// Player isn't moving
 		if(vecVelocity[0] == 0.0 && vecVelocity[1] == 0.0 && vecVelocity[2] == 0.0 && !(buttons & IN_FORWARD || buttons & IN_BACK || buttons & IN_MOVELEFT || buttons & IN_MOVERIGHT || buttons & IN_JUMP))
 		{
-			new iGroundEntity = GetEntPropEnt(client, Prop_Send, "m_hGroundEntity");
-			if(iGroundEntity != -1 && !g_bClientIsHigher[client])
+			if(!g_bClientIsHigher[client] && GetEntPropEnt(client, Prop_Send, "m_hGroundEntity") != -1)
 			{
 				new Float:vecClientOrigin[3];
 				GetClientAbsOrigin(client, vecClientOrigin);
@@ -511,8 +518,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 		// Player is running for 60 thinks? make him visible for a short time
 		else if(g_iLowModelSteps[client] == 60)
 		{
-			new iGroundEntity = GetEntPropEnt(client, Prop_Send, "m_hGroundEntity");
-			if(iGroundEntity != -1 && !g_bClientIsHigher[client])
+			if(!g_bClientIsHigher[client] && GetEntPropEnt(client, Prop_Send, "m_hGroundEntity") != -1)
 			{
 				new Float:vecClientOrigin[3];
 				GetClientAbsOrigin(client, vecClientOrigin);
@@ -715,15 +721,24 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		g_WhistleCount[client] = 0;
 		g_IsFreezed[client] = false;
 		
-		new Float:whistle_delay = GetConVarFloat(hns_cfg_whistle_delay);
-		if(whistle_delay > 0.0 && g_WhistleDelay == INVALID_HANDLE)
+		if(g_FirstTSpawn == 0)
 		{
-			g_WhistlingAllowed = false;
-			g_WhistleDelay = CreateTimer(whistle_delay, Timer_AllowWhistle, _, TIMER_FLAG_NO_MAPCHANGE);
-		}
-		else
-		{
-			g_WhistlingAllowed = true;
+			if(g_WhistleDelay != INVALID_HANDLE)
+			{
+				KillTimer(g_WhistleDelay);
+				g_WhistleDelay = INVALID_HANDLE;
+			}
+			
+			new Float:whistle_delay = GetConVarFloat(hns_cfg_whistle_delay);
+			if(!g_WhistlingAllowed && whistle_delay > 0.0)
+			{
+				g_WhistleDelay = CreateTimer(whistle_delay, Timer_AllowWhistle, _, TIMER_FLAG_NO_MAPCHANGE);
+			}
+			else
+			{
+				g_WhistlingAllowed = true;
+			}
+			g_FirstTSpawn = GetTime();
 		}
 
 		if(GetConVarBool(hns_cfg_freezects))
@@ -767,8 +782,11 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 		// only freeze spawning players if the freezetime is still running.
 		if(GetConVarBool(hns_cfg_freezects) && (float(currentTime - g_FirstCTSpawn) < freezeTime))
 		{
+			g_IsCTWaiting[client] = true;
+			CreateTimer(0.05, FreezePlayer, client, TIMER_FLAG_NO_MAPCHANGE);
+			
 			// Start freezing player
-			CreateTimer(0.05, FreezePlayer, client);
+			g_FreezeCTTimer[client] = CreateTimer(2.0, FreezePlayer, client, TIMER_FLAG_NO_MAPCHANGE|TIMER_REPEAT);
 			
 			if(g_UnfreezeCTTimer[client] != INVALID_HANDLE)
 			{
@@ -780,7 +798,6 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			g_UnfreezeCTTimer[client] = CreateTimer(freezeTime-float(currentTime - g_FirstCTSpawn), UnFreezePlayer, client, TIMER_FLAG_NO_MAPCHANGE);
 			
 			PrintToChat(client, "%s%t", PREFIX, "Wait for t to hide", RoundToFloor(freezeTime-float(currentTime - g_FirstCTSpawn)));
-			g_IsCTWaiting[client] = true;
 		}
 		
 		// Give full money
@@ -828,6 +845,7 @@ public Action:Event_OnRoundStart(Handle:event, const String:name[], bool:dontBro
 		return Plugin_Continue;
 	
 	g_RoundEnded = false;
+	g_WhistlingAllowed = false;
 	
 	// When disabling +use or "e" button open all doors on the map and keep them opened.
 	new bool:bUse = GetConVarBool(hns_cfg_disable_use);
@@ -868,6 +886,7 @@ public Action:Event_OnRoundEnd(Handle:event, const String:name[], bool:dontBroad
 	g_RoundEnded = true;
 	
 	g_FirstCTSpawn = 0;
+	g_FirstTSpawn = 0;
 	
 	if(g_ShowCountdownTimer != INVALID_HANDLE)
 	{
@@ -1056,24 +1075,31 @@ public EntOutput_OnClose(const String:output[], caller, activator, Float:delay)
 // Freeze player function
 public Action:FreezePlayer(Handle:timer, any:client)
 {
-	if(!IsClientInGame(client) || !IsPlayerAlive(client))
-		return Plugin_Handled;
+	if(!IsClientInGame(client) || !IsPlayerAlive(client) || !g_IsCTWaiting[client])
+	{
+		g_FreezeCTTimer[client] = INVALID_HANDLE;
+		return Plugin_Stop;
+	}
 	
+	// Force him to watch at the ground.
+	new Float:fPlayerEyes[3];
+	GetClientEyeAngles(client, fPlayerEyes);
+	fPlayerEyes[0] = 180.0;
+	TeleportEntity(client, NULL_VECTOR, fPlayerEyes, NULL_VECTOR);
 	SetEntData(client, g_Freeze, FL_CLIENT|FL_ATCONTROLS, 4, true);
 	SetEntityMoveType(client, MOVETYPE_NONE);
 	PerformBlind(client, 255);
 	
-	return Plugin_Handled;
+	return Plugin_Continue;
 }
 
 // Unfreeze player function
 public Action:UnFreezePlayer(Handle:timer, any:client)
 {
-	
 	g_UnfreezeCTTimer[client] = INVALID_HANDLE;
 	
 	if(!IsClientInGame(client) || !IsPlayerAlive(client))
-		return Plugin_Handled;
+		return Plugin_Stop;
 	
 	SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
 	SetEntityMoveType(client, MOVETYPE_WALK);
@@ -1087,7 +1113,7 @@ public Action:UnFreezePlayer(Handle:timer, any:client)
 	
 	PrintToChat(client, "%s%t", PREFIX, "Go search");
 		
-	return Plugin_Handled;
+	return Plugin_Stop;
 }
 
 public Action:DisableModelMenu(Handle:timer, any:client)
@@ -1096,7 +1122,7 @@ public Action:DisableModelMenu(Handle:timer, any:client)
 	g_AllowModelChangeTimer[client] = INVALID_HANDLE;
 	
 	if(!IsClientInGame(client))
-		return Plugin_Handled;
+		return Plugin_Stop;
 	
 	g_AllowModelChange[client] = false;
 	
@@ -1111,13 +1137,13 @@ public Action:DisableModelMenu(Handle:timer, any:client)
 		SetRandomModel(client);
 	}
 	
-	return Plugin_Handled;
+	return Plugin_Stop;
 }
 
 public Action:StartVarChecker(Handle:timer, any:client)
 {	
 	if (!IsClientInGame(client))
-		return Plugin_Handled;
+		return Plugin_Stop;
 	
 	// allow watching
 	if(GetClientTeam(client) < CS_TEAM_T)
@@ -1156,7 +1182,7 @@ public Action:PerformCheatPunishment(Handle:timer, any:client)
 	g_CheatPunishTimer[client] = INVALID_HANDLE;
 	
 	if(!IsClientInGame(client) || !IsConVarCheater(client))
-		return Plugin_Handled;
+		return Plugin_Stop;
 	
 	new punishmentType = GetConVarInt(hns_cfg_cheat_punishment);
 	if(punishmentType == 1 && GetClientTeam(client) != CS_TEAM_SPECTATOR )
@@ -1171,7 +1197,7 @@ public Action:PerformCheatPunishment(Handle:timer, any:client)
 				PrintToConsole(client, "Hide and Seek: %t %s 0", "Print to console", cheat_commands[i]);
 		KickClient(client, "Hide and Seek: %t", "Kick bad cvars");
 	}
-	return Plugin_Handled;
+	return Plugin_Stop;
 }
 
 // teach the players the /whistle and /tp commands
@@ -1186,7 +1212,7 @@ public Action:SpamCommands(Handle:timer, any:data)
 				PrintToChat(i, "%s%t", PREFIX, "T type /tp");
 	}
 	g_SpamCommandsTimer = CreateTimer(120.0, SpamCommands, (data==0?1:0));
-	return Plugin_Handled;
+	return Plugin_Stop;
 }
 
 // show all players a countdown
@@ -1209,7 +1235,7 @@ public Action:ShowCountdown(Handle:timer, any:freezeTime)
 				}
 			}
 		}
-		return Plugin_Handled;
+		return Plugin_Stop;
 	}
 	
 	// m_iProgressBarDuration has a limit of 15 seconds, so start showing the bar on 15 seconds left.
@@ -1227,7 +1253,7 @@ public Action:ShowCountdown(Handle:timer, any:freezeTime)
 	
 	g_ShowCountdownTimer = CreateTimer(0.5, ShowCountdown, freezeTime);
 	
-	return Plugin_Handled;
+	return Plugin_Stop;
 }
 
 public Action:ShowRoundTime(Handle:timer, any:roundTime)
@@ -1257,7 +1283,7 @@ public Action:ShowRoundTime(Handle:timer, any:roundTime)
 	else
 		g_RoundTimeTimer = INVALID_HANDLE;
 	
-	return Plugin_Handled;
+	return Plugin_Stop;
 }
 
 public Action:Timer_AllowWhistle(Handle:timer, any:data)
@@ -1265,7 +1291,7 @@ public Action:Timer_AllowWhistle(Handle:timer, any:data)
 	g_WhistlingAllowed = true;
 	
 	g_WhistleDelay = INVALID_HANDLE;
-	return Plugin_Handled;
+	return Plugin_Stop;
 }
 
 public Action:Timer_SwitchTeams(Handle:timer, any:data)
@@ -1284,6 +1310,7 @@ public Action:Timer_SwitchTeams(Handle:timer, any:data)
 			g_bCTToSwitch[i] = false;
 		}
 	}
+	return Plugin_Stop;
 }
 
 public Action:Timer_ChangeTeam(Handle:timer, any:client)
@@ -1336,7 +1363,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 					if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
 					{
 						//PrintToServer("Debug: Switched enough players after unflagging.");
-						return Plugin_Handled;
+						return Plugin_Stop;
 					}
 				}
 			}
@@ -1358,7 +1385,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
 			{
 				//PrintToServer("Debug: Switched enough players after reversing the last change.");
-				return Plugin_Handled;
+				return Plugin_Stop;
 			}
 		}
 		// Switch last joined CT
@@ -1388,7 +1415,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
 			{
 				//PrintToServer("Debug: Switched enough players after checking the last joined CT.");
-				return Plugin_Handled;
+				return Plugin_Stop;
 			}
 		}
 		
@@ -1400,7 +1427,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
 			{
 				//PrintToServer("Debug: Switched enough players after switching dead cts");
-				return Plugin_Handled;
+				return Plugin_Stop;
 			}
 			
 			// Switch one ct to t immediately.
@@ -1422,7 +1449,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 			if(float(iTCount) < fCFGCTRatio || FloatDiv(float(iCTCount), float(iTCount)) <= fCFGRatio)
 			{
 				//PrintToServer("Debug: Switched enough players after flagging alive CTs");
-				return Plugin_Handled;
+				return Plugin_Stop;
 			}
 			
 			if(IsClientInGame(i) && GetClientTeam(i) == CS_TEAM_CT && !g_bCTToSwitch[i])
@@ -1442,7 +1469,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 	{
 		g_iLastJoinedCT = client;
 	}
-	return Plugin_Handled;
+	return Plugin_Stop;
 }
 
 /*
@@ -2050,6 +2077,10 @@ BuildMainMenu()
 					
 					SetMenuTitle(g_ModelMenu[nextLangID], title);
 					SetMenuExitButton(g_ModelMenu[nextLangID], true);
+					
+					// Add random option
+					FormatEx(title, sizeof(title), "%T:", "random", LANG_SERVER);
+					AddMenuItem(g_ModelMenu[nextLangID], "random", title);
 				}
 				
 				// add it to the menu
@@ -2339,6 +2370,7 @@ public RestartGame(Handle:convar, const String:oldValue[], const String:newValue
 		g_RoundEnded = true;
 		
 		g_FirstCTSpawn = 0;
+		g_FirstTSpawn = 0;
 		
 		if(g_ShowCountdownTimer != INVALID_HANDLE)
 		{

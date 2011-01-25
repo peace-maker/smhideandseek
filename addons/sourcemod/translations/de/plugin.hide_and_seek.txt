@@ -223,4 +223,9 @@
 	{
 		"de"			"{1} wurde in das Versteckerteam verschoben."
 	}
+
+	"random"
+	{
+		"de"			"Zufälliges Model"
+	}
 }
