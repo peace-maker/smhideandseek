@@ -1034,9 +1034,17 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 	if(disconnect || (team != CS_TEAM_CT && team != CS_TEAM_T))
 		g_bCTToSwitch[client] = false;
 	
+	// Reset the last joined ct, if he left
 	if(disconnect && g_iLastJoinedCT == client)
 		g_iLastJoinedCT = -1;
 	
+	// Strip the player
+	if(!disconnect && team == CS_TEAM_T && IsPlayerAlive(client))
+	{
+		StripPlayerWeapons(client);
+	}
+	
+	// Ignore, if Teambalance is disabled
 	if(GetConVarFloat(hns_cfg_ct_ratio) == 0.0)
 		return Plugin_Continue;
 	
@@ -2280,6 +2288,19 @@ bool:SetThirdPersonView(client, bool:third)
 		return true;
 	}
 	return false;
+}
+
+stock StripPlayerWeapons(client)
+{
+	new iWeapon;
+	for(new i=CS_SLOT_PRIMARY;i<=CS_SLOT_C4;i++)
+	{
+		while((iWeapon = GetPlayerWeaponSlot(client, i)) != -1)
+		{
+			RemovePlayerItem(client, iWeapon);
+			RemoveEdict(iWeapon);
+		}
+	}
 }
 
 /*
