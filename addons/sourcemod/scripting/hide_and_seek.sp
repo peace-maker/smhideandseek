@@ -1030,15 +1030,48 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 			SendConVarValue(client, g_forceCamera, "1");
 	}
 	
-	// Player disconnected or joined spectator?
-	if(disconnect || (team != CS_TEAM_CT && team != CS_TEAM_T))
+	// Player disconnected?
+	if(disconnect)
 		g_bCTToSwitch[client] = false;
+	
+	// Player joined spectator?
+	if(!disconnect && team != CS_TEAM_CT && team != CS_TEAM_T)
+	{
+		g_bCTToSwitch[client] = false;
+		
+		// Unblind and show weapons again
+		SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 1);
+		PerformBlind(client, 0);
+		
+		// Reset the model fix
+		if(g_FixedModelHeight[client] != 0.0 && g_bClientIsHigher[client])
+		{
+			SetEntityMoveType(client, MOVETYPE_WALK);
+			g_bClientIsHigher[client] = false;
+		}
+		g_FixedModelHeight[client] = 0.0;
+		g_bClientIsHigher[client] = false;
+		
+		// Unfreeze, if freezed before
+		if(g_IsFreezed[client])
+		{
+			if(GetConVarInt(hns_cfg_hider_freeze_mode) == 1)
+				SetEntityMoveType(client, MOVETYPE_WALK);
+			else
+			{
+				SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
+				SetEntityMoveType(client, MOVETYPE_WALK);
+			}
+			
+			g_IsFreezed[client] = false;
+		}
+	}
 	
 	// Reset the last joined ct, if he left
 	if(disconnect && g_iLastJoinedCT == client)
 		g_iLastJoinedCT = -1;
 	
-	// Strip the player
+	// Strip the player if joined T midround
 	if(!disconnect && team == CS_TEAM_T && IsPlayerAlive(client))
 	{
 		StripPlayerWeapons(client);
