@@ -5,7 +5,7 @@
 #include <cstrike>
 #include <sdkhooks>
 
-#define PLUGIN_VERSION "1.4.0"
+#define PLUGIN_VERSION "1.4.1"
 
 // that's what GetLanguageCount() got me
 #define MAX_LANGUAGES 27
@@ -42,6 +42,7 @@ new Handle:hns_cfg_show_progressbar = INVALID_HANDLE;
 new Handle:hns_cfg_ct_ratio = INVALID_HANDLE;
 new Handle:hns_cfg_disable_use = INVALID_HANDLE;
 new Handle:hns_cfg_hider_freeze_inair = INVALID_HANDLE;
+new Handle:hns_cfg_remove_shadows = INVALID_HANDLE;
 
 // primary enableswitch
 new bool:g_EnableHnS = true;
@@ -183,6 +184,7 @@ public OnPluginStart()
 	hns_cfg_ct_ratio =			CreateConVar("sm_hns_ct_ratio", "3", "The ratio of hiders to 1 seeker. 0 to disables teambalance. (Default: 3)", FCVAR_PLUGIN, true, 1.00, true, 64.00);
 	hns_cfg_disable_use =		CreateConVar("sm_hns_disable_use", "1", "Disable CTs pushing things. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	hns_cfg_hider_freeze_inair =CreateConVar("sm_hns_hider_freeze_inair", "0", "Are hiders allowed to freeze in the air? (Default: 0)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	hns_cfg_remove_shadows =	CreateConVar("sm_hns_remove_shadows", "1", "Remove shadows from physics? (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_EnableHnS = GetConVarBool(hns_cfg_enable);
 	HookConVarChange(hns_cfg_enable, Cfg_OnChangeEnable);
@@ -363,6 +365,18 @@ public OnMapStart()
 		}
 	}
 	
+	// Remove shadows
+	// Thanks to Bacardi and Leonardo @ http://forums.alliedmods.net/showthread.php?t=154269
+	if(GetConVarBool(hns_cfg_remove_shadows))
+	{
+		new ent = -1;
+		while((ent = FindEntityByClassname(ent, "shadow_control")) != -1)
+		{
+			SetVariantInt(1);
+			AcceptEntityInput(ent, "SetShadowsDisabled");
+		}
+	}
+	
 	// Hide players from being shown on the radar.
 	// Thanks to javalia @ alliedmods.net
 	g_iPlayerManager = FindEntityByClassname(0, "cs_player_manager");
@@ -370,6 +384,7 @@ public OnMapStart()
 	SDKHook(g_iPlayerManager, SDKHook_PreThink, Hook_PMOnPostThink);
 	SDKHook(g_iPlayerManager, SDKHook_PreThinkPost, Hook_PMOnPostThink);
 	SDKHook(g_iPlayerManager, SDKHook_Think, Hook_PMOnPostThink);
+	SDKHook(g_iPlayerManager, SDKHook_ThinkPost, Hook_PMOnPostThink);
 	SDKHook(g_iPlayerManager, SDKHook_PostThink, Hook_PMOnPostThink);
 	SDKHook(g_iPlayerManager, SDKHook_PostThinkPost, Hook_PMOnPostThink);
 }
@@ -407,6 +422,7 @@ public OnClientPutInServer(client)
 	SDKHook(client, SDKHook_PreThink, OnPlayerThink);
 	SDKHook(client, SDKHook_PreThinkPost, OnPlayerThink);
 	SDKHook(client, SDKHook_Think, OnPlayerThink);
+	SDKHook(client, SDKHook_ThinkPost, OnPlayerThink);
 	SDKHook(client, SDKHook_PostThink, OnPlayerThink);
 	SDKHook(client, SDKHook_PostThinkPost, OnPlayerThink);
 	
@@ -809,6 +825,9 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			Display_Help(client, 0);
 			g_FirstSpawn[client] = false;
 		}
+		
+		// Make sure CTs have a knife
+		CreateTimer(2.0, Timer_CheckCTHasKnife, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
 	}
 	
 	return Plugin_Continue;
@@ -1513,6 +1532,25 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 	return Plugin_Stop;
 }
 
+// Make sure CTs have knifes
+public Action:Timer_CheckCTHasKnife(Handle:timer, any:userid)
+{
+	new client = GetClientOfUserId(userid);
+	if(!client)
+		return Plugin_Stop;
+	
+	if(IsClientInGame(client) && IsPlayerAlive(client) && GetClientTeam(client) == CS_TEAM_CT)
+	{
+		new iWeapon = GetPlayerWeaponSlot(client, 2);
+		if(iWeapon == -1)
+		{
+			GivePlayerItem(client, "weapon_knife");
+		}
+	}
+	
+	return Plugin_Stop;
+}
+
 /*
 * 
 * Console Command Handling
@@ -1916,23 +1954,31 @@ public Menu_Group(Handle:menu, MenuAction:action, client, param2)
 			new bool:found = GetMenuItem(menu, param2, info, sizeof(info), _, info2, sizeof(info2));
 			if(found)
 			{
-				// Modelheight fix
-				new iPosition;
-				if((iPosition = StrContains(info, "||")) != -1)
+				
+				if(StrEqual(info, "random"))
 				{
-					g_FixedModelHeight[client] = StringToFloat(info[iPosition+2]);
-					PrintToChat(client, "This model is bugged and uses a fixed height set. (%f)", g_FixedModelHeight[client]);
+					SetRandomModel(client);
 				}
 				else
 				{
-					g_FixedModelHeight[client]= 0.0;
+					// Modelheight fix
+					new iPosition;
+					if((iPosition = StrContains(info, "||")) != -1)
+					{
+						g_FixedModelHeight[client] = StringToFloat(info[iPosition+2]);
+						PrintToChat(client, "This model is bugged and uses a fixed height set. (%f)", g_FixedModelHeight[client]);
+					}
+					else
+					{
+						g_FixedModelHeight[client]= 0.0;
+					}
+					
+					if(SplitString(info, "||", sModelPath, sizeof(sModelPath)) == -1)
+						strcopy(sModelPath, sizeof(sModelPath), info);
+					
+					SetEntityModel(client, sModelPath);
+					PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", info2);
 				}
-				
-				if(SplitString(info, "||", sModelPath, sizeof(sModelPath)) == -1)
-					strcopy(sModelPath, sizeof(sModelPath), info);
-				
-				SetEntityModel(client, sModelPath);
-				PrintToChat(client, "%s%t \x01%s.", PREFIX, "Model Changed", info2);
 				g_ModelChangeCount[client]++;
 			}
 		} else if(action == MenuAction_Cancel)
