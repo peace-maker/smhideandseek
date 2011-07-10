@@ -1044,7 +1044,7 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 		g_bCTToSwitch[client] = false;
 	
 	// Player joined spectator?
-	if(!disconnect && team != CS_TEAM_CT && team != CS_TEAM_T)
+	if(!disconnect && team < CS_TEAM_T)
 	{
 		g_bCTToSwitch[client] = false;
 		
@@ -1055,8 +1055,7 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 		// Reset the model fix
 		if(g_iFixedModelHeight[client] != 0.0 && g_bClientIsHigher[client])
 		{
-			SetEntityMoveType(client, MOVETYPE_WALK);
-			g_bClientIsHigher[client] = false;
+			SetEntityMoveType(client, MOVETYPE_OBSERVER);
 		}
 		g_iFixedModelHeight[client] = 0.0;
 		g_bClientIsHigher[client] = false;
@@ -1065,11 +1064,11 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 		if(g_bIsFreezed[client])
 		{
 			if(GetConVarInt(g_hCVHiderFreezeMode) == 1)
-				SetEntityMoveType(client, MOVETYPE_WALK);
+				SetEntityMoveType(client, MOVETYPE_OBSERVER);
 			else
 			{
 				SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
-				SetEntityMoveType(client, MOVETYPE_WALK);
+				SetEntityMoveType(client, MOVETYPE_OBSERVER);
 			}
 			
 			g_bIsFreezed[client] = false;
@@ -1091,8 +1090,8 @@ public Action:Event_OnPlayerTeam(Handle:event, const String:name[], bool:dontBro
 		return Plugin_Continue;
 	
 	// GetTeamClientCount() doesn't handle the teamchange we're called for in player_team,
-	// so wait one frame to update the counts
-	CreateTimer(0.1, Timer_ChangeTeam, client, TIMER_FLAG_NO_MAPCHANGE);
+	// so wait two frames to update the counts
+	CreateTimer(0.2, Timer_ChangeTeam, client, TIMER_FLAG_NO_MAPCHANGE);
 	
 	return Plugin_Continue;
 }
@@ -1217,11 +1216,20 @@ public Action:StartVarChecker(Handle:timer, any:client)
 			g_hCheatPunishTimer[client] = CreateTimer(15.0, PerformCheatPunishment, client, TIMER_FLAG_NO_MAPCHANGE);
 		}
 	}
-	else if(!g_bIsCTWaiting[client])
+	else
 	{
-		if(IsPlayerAlive(client))
-			SetEntityMoveType(client, MOVETYPE_WALK);
-		PerformBlind(client, 0);
+		if(g_hCheatPunishTimer[client] != INVALID_HANDLE)
+		{
+			KillTimer(g_hCheatPunishTimer[client]);
+			g_hCheatPunishTimer[client] = INVALID_HANDLE;
+		}
+		
+		if(!g_bIsCTWaiting[client])
+		{
+			if(IsPlayerAlive(client))
+				SetEntityMoveType(client, MOVETYPE_WALK);
+			PerformBlind(client, 0);
+		}
 	}
 	
 	return Plugin_Continue;
@@ -1237,6 +1245,37 @@ public Action:PerformCheatPunishment(Handle:timer, any:client)
 	new punishmentType = GetConVarInt(g_hCVCheatPunishment);
 	if(punishmentType == 1 && GetClientTeam(client) != CS_TEAM_SPECTATOR )
 	{
+		g_bCTToSwitch[client] = false;
+		
+		// Unblind and show weapons again
+		SetEntProp(client, Prop_Send, "m_bDrawViewmodel", 1);
+		PerformBlind(client, 0);
+		
+		// Reset the model fix
+		if(g_iFixedModelHeight[client] != 0.0 && g_bClientIsHigher[client])
+		{
+			SetEntityMoveType(client, MOVETYPE_OBSERVER);
+		}
+		g_iFixedModelHeight[client] = 0.0;
+		g_bClientIsHigher[client] = false;
+		
+		// Unfreeze, if freezed before
+		if(g_bIsFreezed[client])
+		{
+			if(GetConVarInt(g_hCVHiderFreezeMode) == 1)
+				SetEntityMoveType(client, MOVETYPE_OBSERVER);
+			else
+			{
+				SetEntData(client, g_Freeze, FL_FAKECLIENT|FL_ONGROUND|FL_PARTIALGROUND, 4, true);
+				SetEntityMoveType(client, MOVETYPE_OBSERVER);
+			}
+			
+			g_bIsFreezed[client] = false;
+		}
+		
+		if(g_iLastJoinedCT == client)
+			g_iLastJoinedCT = -1;
+		
 		ChangeClientTeam(client, CS_TEAM_SPECTATOR);
 		PrintToChatAll("%s%N %t", PREFIX, client, "Spectator Cheater");
 	}
@@ -1371,9 +1410,22 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 	new iToBeSwitched = 0;
 	
 	// Check, how many cts are going to get switched to terror at the end of the round
+	new iTeam;
 	for(new i=1;i<=MaxClients;i++)
 	{
-		if(g_bCTToSwitch[i])
+		// Don't care for cheaters
+		if(IsConVarCheater(i))
+		{
+			if(IsClientInGame(i))
+			{
+				iTeam = GetClientTeam(i);
+				if(iTeam == CS_TEAM_CT)
+					iCTCount--;
+				else if(iTeam == CS_TEAM_T)
+					iTCount--;
+			}
+		}
+		else if(g_bCTToSwitch[i])
 		{
 			iCTCount--;
 			iTCount++;
@@ -1391,7 +1443,7 @@ public Action:Timer_ChangeTeam(Handle:timer, any:client)
 	
 	decl String:sName[64];
 	// There are more CTs than we want in the CT team and it's not the first CT
-	if(iCTCount != 1 && fRatio > fCFGRatio)
+	if((iCTCount > 0 || iTCount > 0) && iCTCount != 1 && fRatio > fCFGRatio)
 	{
 		//PrintToServer("Debug: Too much CTs! Taking action...");
 		// Any players flagged to be moved at the end of the round?
@@ -2417,7 +2469,7 @@ bool:SetThirdPersonView(client, bool:third)
 
 stock StripPlayerWeapons(client)
 {
-	new iWeapon;
+	new iWeapon = -1;
 	for(new i=CS_SLOT_PRIMARY;i<=CS_SLOT_C4;i++)
 	{
 		while((iWeapon = GetPlayerWeaponSlot(client, i)) != -1)
@@ -2479,10 +2531,18 @@ public OnChangeAntiCheat(Handle:convar, const String:oldValue[], const String:ne
 	{
 		for(new i=1;i<=MaxClients;i++)
 		{
-			if(IsClientInGame(i) && !IsFakeClient(i) && g_hCheckVarTimer[i] != INVALID_HANDLE)
+			if(IsClientInGame(i) && !IsFakeClient(i))
 			{
-				KillTimer(g_hCheckVarTimer[i]);
-				g_hCheckVarTimer[i] = INVALID_HANDLE;
+				if(g_hCheckVarTimer[i] != INVALID_HANDLE)
+				{
+					KillTimer(g_hCheckVarTimer[i]);
+					g_hCheckVarTimer[i] = INVALID_HANDLE;
+				}
+				if(g_hCheatPunishTimer[i] != INVALID_HANDLE)
+				{
+					KillTimer(g_hCheatPunishTimer[i]);
+					g_hCheatPunishTimer[i] = INVALID_HANDLE;
+				}
 			}
 		}
 	}
@@ -2611,10 +2671,18 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 				continue;
 			
 			// stop cheat checking
-			if(!IsFakeClient(c) && g_hCheckVarTimer[c] != INVALID_HANDLE)
+			if(!IsFakeClient(c))
 			{
-				KillTimer(g_hCheckVarTimer[c]);
-				g_hCheckVarTimer[c] = INVALID_HANDLE;
+				if(g_hCheckVarTimer[c] != INVALID_HANDLE)
+				{
+					KillTimer(g_hCheckVarTimer[c]);
+					g_hCheckVarTimer[c] = INVALID_HANDLE;
+				}
+				if(g_hCheatPunishTimer[c] != INVALID_HANDLE)
+				{
+					KillTimer(g_hCheatPunishTimer[c]);
+					g_hCheatPunishTimer[c] = INVALID_HANDLE;
+				}
 			}
 			
 			// Unhook weapon pickup
