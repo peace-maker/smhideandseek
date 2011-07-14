@@ -240,4 +240,21 @@
 	{
 		"en"			"Random model"
 	}
+
+	"is heightfixed"
+	{
+		"en"			"This model is bugged and uses a fixed height. You will bounce up frequently. ({1})"
+	}
+
+	"tax charged"
+	{
+		/* 1: The tax in dollars */
+		"#format"		"{1:d}"
+		"en"			"To use this model a tax of ${1} has been charged."
+	}
+
+	"not enough money"
+	{
+		"en"			"You don't have enough money to use this model."
+	}
 }

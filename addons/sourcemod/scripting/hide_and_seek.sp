@@ -43,6 +43,7 @@ new Handle:g_hCVCTRatio = INVALID_HANDLE;
 new Handle:g_hCVDisableUse = INVALID_HANDLE;
 new Handle:g_hCVHiderFreezeInAir = INVALID_HANDLE;
 new Handle:g_hCVRemoveShadows = INVALID_HANDLE;
+new Handle:g_hCVUseTaxedInRandom = INVALID_HANDLE;
 
 // primary enableswitch
 new bool:g_bEnableHnS = true;
@@ -183,7 +184,8 @@ public OnPluginStart()
 	g_hCVCTRatio =			CreateConVar("sm_hns_ct_ratio", "3", "The ratio of hiders to 1 seeker. 0 to disables teambalance. (Default: 3)", FCVAR_PLUGIN, true, 1.00, true, 64.00);
 	g_hCVDisableUse =		CreateConVar("sm_hns_disable_use", "1", "Disable CTs pushing things. (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	g_hCVHiderFreezeInAir =	CreateConVar("sm_hns_hider_freeze_inair", "0", "Are hiders allowed to freeze in the air? (Default: 0)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
-	g_hCVRemoveShadows =	CreateConVar("sm_hns_remove_shadows", "1", "Remove shadows from physics? (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	g_hCVRemoveShadows =	CreateConVar("sm_hns_remove_shadows", "1", "Remove shadows from players and physic models? (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	g_hCVUseTaxedInRandom =	CreateConVar("sm_hns_use_taxed_in_random", "0", "Include taxed models when using random model choice? (Default: 0)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_bEnableHnS = GetConVarBool(g_hCVEnable);
 	HookConVarChange(g_hCVEnable, Cfg_OnChangeEnable);
@@ -772,9 +774,6 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 			
 			PrintToChat(client, "%s%t", PREFIX, "Wait for t to hide", RoundToFloor(freezeTime-float(currentTime - g_iFirstCTSpawn)));
 		}
-		
-		// Give full money
-		SetEntData(client, g_iAccount, 16000, 4, true);
 		
 		// show help menu on first spawn
 		if(GetConVarBool(g_hCVShowHideHelp) && g_bFirstSpawn[client])
@@ -1586,7 +1585,8 @@ public Action:Timer_CheckCTHasKnife(Handle:timer, any:userid)
 		new iWeapon = GetPlayerWeaponSlot(client, 2);
 		if(iWeapon == -1)
 		{
-			GivePlayerItem(client, "weapon_knife");
+			iWeapon = GivePlayerItem(client, "weapon_knife");
+			EquipPlayerWeapon(client, iWeapon);
 		}
 	}
 	
@@ -2035,6 +2035,36 @@ public Menu_Group(Handle:menu, MenuAction:action, client, param2)
 				}
 				else
 				{
+					// Check for enough money
+					decl String:sTax[32];
+					new iPosition;
+					if((iPosition = StrContains(info, "||t_")) != -1)
+					{
+						new iAccountValue = GetEntData(client, g_iAccount);
+						
+						// Stupid string information storage-.-
+						new iPosition2 = StrContains(info[iPosition+4], "||hi_");
+						if(iPosition2 != -1)
+							strcopy(sTax, iPosition2-iPosition+3, info[iPosition+4]);
+						else
+							strcopy(sTax, sizeof(sTax), info[iPosition+4]);
+						
+						new iTax = StringToInt(sTax);
+						// He doesn't have enough money?
+						if(iTax > iAccountValue)
+						{
+							PrintToChat(client, "%s%t", PREFIX, "not enough money");
+							// Show the menu again
+							Menu_SelectModel(client, 0);
+							return;
+						}
+						
+						// Get the money
+						SetEntData(client, g_iAccount, (iAccountValue - iTax), 4, true);
+						
+						PrintToChat(client, "%s%t", PREFIX, "tax charged", iTax);
+					}
+					
 					// Put him down before changing the model again
 					if(g_bClientIsHigher[client])
 					{
@@ -2047,11 +2077,10 @@ public Menu_Group(Handle:menu, MenuAction:action, client, param2)
 					}
 					
 					// Modelheight fix
-					new iPosition;
-					if((iPosition = StrContains(info, "||")) != -1)
+					if((iPosition = StrContains(info, "||hi_")) != -1)
 					{
-						g_iFixedModelHeight[client] = StringToFloat(info[iPosition+2]);
-						PrintToChat(client, "%sThis model is bugged and uses a fixed height set. (%.02f)", PREFIX, g_iFixedModelHeight[client]);
+						g_iFixedModelHeight[client] = StringToFloat(info[iPosition+5]);
+						PrintToChat(client, "%s%t", PREFIX, "is heightfixed");
 					}
 					else
 					{
@@ -2220,7 +2249,15 @@ BuildMainMenu()
 		KvGetString(kv, "heightfix", sHeightFix, sizeof(sHeightFix), "noo");
 		if(!StrEqual(sHeightFix, "noo"))
 		{
-			Format(finalOutput, sizeof(finalOutput), "%s||%s", finalOutput, sHeightFix);
+			Format(finalOutput, sizeof(finalOutput), "%s||hi_%s", finalOutput, sHeightFix);
+		}
+		
+		// Check for tax
+		decl String:sTax[32];
+		KvGetString(kv, "tax", sTax, sizeof(sTax), "noo");
+		if(!StrEqual(sTax, "noo"))
+		{
+			Format(finalOutput, sizeof(finalOutput), "%s||t_%s", finalOutput, sTax);
 		}
 		
 		// roll through all available languages
@@ -2231,6 +2268,10 @@ BuildMainMenu()
 			KvGetString(kv, lang, name, sizeof(name));
 			if(strlen(name) > 0)
 			{
+				// Show the tax
+				if(!StrEqual(sTax, "noo"))
+					Format(name, sizeof(name), "%s ($%d)", name, StringToInt(sTax));
+				
 				// language already in array, only in the wrong order in the file?
 				langID = GetLanguageID(lang);
 				
@@ -2383,14 +2424,33 @@ PerformBlind(client, amount)
 SetRandomModel(client)
 {
 	// give him a random one.
-	decl String:ModelPath[80], String:finalPath[100], String:ModelName[60], String:langCode[4], String:sHeightFix[35];
+	decl String:ModelPath[80], String:finalPath[100], String:ModelName[60];
+	decl String:langCode[4], String:sHeightFix[35], String:sTax[32];
 	new RandomNumber = GetRandomInt(0, g_iTotalModelsAvailable-1);	
 	new currentI = 0;
+	new iTax;
+	new iAccountValue = GetEntData(client, g_iAccount);
+	new bool:bUseTaxedInRandom = GetConVarBool(g_hCVUseTaxedInRandom);
 	KvGotoFirstSubKey(kv);
 	do
 	{
 		if(currentI == RandomNumber)
 		{
+			// Check for enough money
+			KvGetString(kv, "tax", sTax, sizeof(sTax), "noo");
+			if(!StrEqual(sTax, "noo"))
+			{
+				iTax = StringToInt(sTax);
+				// He doesn't have enough money? skip this one
+				if(!bUseTaxedInRandom || iTax > iAccountValue)
+					continue;
+				
+				// Get the money
+				SetEntData(client, g_iAccount, iAccountValue - iTax, 4, true);
+				
+				PrintToChat(client, "%s%t", PREFIX, "tax charged", iTax);
+			}
+			
 			// set the model
 			KvGetSectionName(kv, ModelPath, sizeof(ModelPath));
 			
@@ -2414,7 +2474,7 @@ SetRandomModel(client)
 			if(!StrEqual(sHeightFix, "noo"))
 			{
 				g_iFixedModelHeight[client] = StringToFloat(sHeightFix);
-				PrintToChat(client, "%sThis model is bugged and uses a fixed height set. (%.02f)", PREFIX, g_iFixedModelHeight[client]);
+				PrintToChat(client, "%s%t", PREFIX, "is heightfixed");
 			}
 			else
 			{

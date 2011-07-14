@@ -228,4 +228,20 @@
 	{
 		"de"			"Zufälliges Model"
 	}
+
+	"is heightfixed"
+	{
+		"de"			"Dieses Model ist verbuggt und benutzt den Höhenfixer. Du wirst immer wieder hochspringen."
+	}
+
+	"tax charged"
+	{
+		/* 1: The tax in dollars */
+		"de"			"Für dieses Model wurde eine Gebühr von ${1} eingezogen."
+	}
+
+	"not enough money"
+	{
+		"de"			"Du hast nicht genug Geld, um dieses Model zu benutzen."
+	}
 }
