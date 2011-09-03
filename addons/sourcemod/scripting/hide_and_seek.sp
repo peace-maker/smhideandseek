@@ -395,7 +395,27 @@ public OnMapEnd()
 		}
 		Format(g_sModelMenuLanguage[i], 4, "");
 	}
-
+	
+	g_iFirstCTSpawn = 0;
+	g_iFirstTSpawn = 0;
+	
+	if(g_hShowCountdownTimer != INVALID_HANDLE)
+	{
+		KillTimer(g_hShowCountdownTimer);
+		g_hShowCountdownTimer = INVALID_HANDLE;
+	}
+	
+	if(g_hRoundTimeTimer != INVALID_HANDLE)
+	{
+		KillTimer(g_hRoundTimeTimer);
+		g_hRoundTimeTimer = INVALID_HANDLE;
+	}
+	
+	if(g_hWhistleDelay != INVALID_HANDLE)
+	{
+		KillTimer(g_hWhistleDelay);
+		g_hWhistleDelay = INVALID_HANDLE;
+	}
 }
 
 public OnClientPutInServer(client)
