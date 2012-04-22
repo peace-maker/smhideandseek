@@ -44,6 +44,7 @@ new Handle:g_hCVDisableUse = INVALID_HANDLE;
 new Handle:g_hCVHiderFreezeInAir = INVALID_HANDLE;
 new Handle:g_hCVRemoveShadows = INVALID_HANDLE;
 new Handle:g_hCVUseTaxedInRandom = INVALID_HANDLE;
+new Handle:g_hCVHidePlayerLocation = INVALID_HANDLE;
 
 // primary enableswitch
 new bool:g_bEnableHnS = true;
@@ -110,7 +111,8 @@ new String:protected_cvars[][] = {"mp_flashlight",
 								  "mp_playerid",
 								  "sv_allowminmodels",
 								  "sv_turbophysics",
-								  "mp_teams_unbalance_limit"
+								  "mp_teams_unbalance_limit",
+								  "mp_show_voice_icons"
 								 };
 new forced_values[] = {0, // mp_flashlight
 					   0, // sv_footsteps
@@ -123,7 +125,8 @@ new forced_values[] = {0, // mp_flashlight
 					   1, // mp_playerid
 					   0, // sv_allowminmodels
 					   1, // sv_turbophysics
-					   0 // mp_teams_unbalance_limit
+					   0, // mp_teams_unbalance_limit
+					   0 // mp_show_voice_icons
 					  };
 new previous_values[12] = {0,...}; // save previous values when forcing above, so we can restore the config if hns is disabled midgame. !same as comment next line!
 new Handle:g_hProtectedConvar[12] = {INVALID_HANDLE,...}; // 12 = amount of protected_cvars. update if you add one.
@@ -186,6 +189,7 @@ public OnPluginStart()
 	g_hCVHiderFreezeInAir =	CreateConVar("sm_hns_hider_freeze_inair", "0", "Are hiders allowed to freeze in the air? (Default: 0)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	g_hCVRemoveShadows =	CreateConVar("sm_hns_remove_shadows", "1", "Remove shadows from players and physic models? (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	g_hCVUseTaxedInRandom =	CreateConVar("sm_hns_use_taxed_in_random", "0", "Include taxed models when using random model choice? (Default: 0)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
+	g_hCVHidePlayerLocation=CreateConVar("sm_hns_hide_player_locations", "1", "Hide the location info shown next to players name on voice chat and teamsay? (Default: 1)", FCVAR_PLUGIN, true, 0.00, true, 1.00);
 	
 	g_bEnableHnS = GetConVarBool(g_hCVEnable);
 	HookConVarChange(g_hCVEnable, Cfg_OnChangeEnable);
@@ -431,6 +435,9 @@ public OnClientPutInServer(client)
 	
 	// Hook attackings to hide blood
 	SDKHook(client, SDKHook_TraceAttack, OnTraceAttack);
+	
+	// Hide player location info
+	SDKHook(client, SDKHook_PostThinkPost, Hook_OnPostThinkPost);
 }
 
 public OnClientDisconnect(client)
@@ -642,6 +649,12 @@ public Action:OnTraceAttack(victim, &attacker, &inflictor, &Float:damage, &damag
 	}
 	
 	return Plugin_Continue;
+}
+
+public Hook_OnPostThinkPost(client)
+{
+	if(GetConVarBool(g_hCVHidePlayerLocation))
+		SetEntPropString(client, Prop_Send, "m_szLastPlaceName", "");
 }
 
 /*
