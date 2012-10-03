@@ -375,11 +375,25 @@ public OnMapStart()
 	// Thanks to Bacardi and Leonardo @ http://forums.alliedmods.net/showthread.php?t=154269
 	if(GetConVarBool(g_hCVRemoveShadows))
 	{
+		new bool:bShadowDisabled = false;
 		new ent = -1;
 		while((ent = FindEntityByClassname(ent, "shadow_control")) != -1)
 		{
 			SetVariantInt(1);
 			AcceptEntityInput(ent, "SetShadowsDisabled");
+			bShadowDisabled = true;
+		}
+		
+		// Some maps don't have a shadow_control entity, so we create one.
+		// Thanks to zipcore's suggestion http://forums.alliedmods.net/showpost.php?p=1811214&postcount=16
+		if(!bShadowDisabled)
+		{
+			ent = CreateEntityByName("shadow_control");
+			if(ent != -1)
+			{
+				SetVariantInt(1);
+				AcceptEntityInput(ent, "SetShadowsDisabled");
+			}
 		}
 	}
 }
