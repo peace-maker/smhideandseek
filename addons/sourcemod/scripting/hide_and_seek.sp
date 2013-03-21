@@ -128,8 +128,8 @@ new forced_values[] = {0, // mp_flashlight
 					   0, // mp_teams_unbalance_limit
 					   0 // mp_show_voice_icons
 					  };
-new previous_values[12] = {0,...}; // save previous values when forcing above, so we can restore the config if hns is disabled midgame. !same as comment next line!
-new Handle:g_hProtectedConvar[12] = {INVALID_HANDLE,...}; // 12 = amount of protected_cvars. update if you add one.
+new previous_values[13] = {0,...}; // save previous values when forcing above, so we can restore the config if hns is disabled midgame. !same as comment next line!
+new Handle:g_hProtectedConvar[13] = {INVALID_HANDLE,...}; // 13 = amount of protected_cvars. update if you add one.
 new Handle:g_hForceCamera = INVALID_HANDLE;
 
 // whistle sounds
@@ -446,6 +446,9 @@ public OnClientPutInServer(client)
 	
 	// Hook weapon pickup
 	SDKHook(client, SDKHook_WeaponCanUse, OnWeaponCanUse);
+	SDKHook(client, SDKHook_WeaponCanSwitchTo, OnWeaponCanUse);
+	SDKHook(client, SDKHook_WeaponEquip, OnWeaponCanUse);
+	SDKHook(client, SDKHook_WeaponSwitch, OnWeaponCanUse);
 	
 	// Hook attackings to hide blood
 	SDKHook(client, SDKHook_TraceAttack, OnTraceAttack);
@@ -513,7 +516,7 @@ public OnClientDisconnect(client)
 }
 
 // prevent players from ducking
-public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon)
+public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:angles[3], &weapon, &subtype, &cmdnum, &tickcount, &seed, mouse[2])
 {
 	if(!g_bEnableHnS)
 		return Plugin_Continue;
