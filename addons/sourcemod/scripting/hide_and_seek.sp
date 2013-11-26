@@ -142,6 +142,9 @@ new String:whistle_sounds[][] = {"ambient/animal/cow.wav", "ambient/animal/horse
 new g_iLastJoinedCT = -1;
 new bool:g_bCTToSwitch[MAXPLAYERS+1] = {false,...};
 
+// AFK check
+new Float:g_fSpawnPosition[MAXPLAYERS+1][3];
+
 public Plugin:myinfo = 
 {
 	name = "Hide and Seek",
@@ -508,6 +511,12 @@ public OnClientDisconnect(client)
 	g_bCTToSwitch[client] = false;
 	CreateTimer(0.1, Timer_ChangeTeam, client, TIMER_FLAG_NO_MAPCHANGE);
 	
+	// AFK check
+	for(new i=0;i<3;i++)
+	{
+		g_fSpawnPosition[client][i] = 0.0;
+	}
+	
 	/*if (g_hCheckVarTimer[client] != INVALID_HANDLE)
 	{
 		KillTimer(g_hCheckVarTimer[client]);
@@ -610,7 +619,7 @@ public Action:OnPlayerRunCmd(client, &buttons, &impulse, Float:vel[3], Float:ang
 public Action:OnWeaponCanUse(client, weapon)
 {
 	// Allow only CTs to use a weapon
-	if(g_bEnableHnS && GetClientTeam(client) != CS_TEAM_CT)
+	if(g_bEnableHnS && IsClientInGame(client) && GetClientTeam(client) != CS_TEAM_CT)
 	{
 		return Plugin_Handled;
 	}
@@ -629,7 +638,7 @@ public Action:OnTraceAttack(victim, &attacker, &inflictor, &Float:damage, &damag
 		new remainingHealth = GetClientHealth(victim)-RoundToFloor(damage);
 		
 		// Attacker is a human?
-		if(GetConVarBool(g_hCVHPSeekerEnable) && attacker > 0 && attacker <= MaxClients && IsPlayerAlive(attacker))
+		if(GetConVarBool(g_hCVHPSeekerEnable) && attacker > 0 && attacker <= MaxClients && IsPlayerAlive(attacker) && !IsPlayerAFK(victim))
 		{
 			new decrease = GetConVarInt(g_hCVHPSeekerDec);
 			
@@ -644,7 +653,7 @@ public Action:OnTraceAttack(victim, &attacker, &inflictor, &Float:damage, &damag
 		// prevent errors in console because of missing death animation of prop ;)
 		if(remainingHealth < 0)
 		{
-			SetEntityModel(victim, "models/player/t_guerilla.mdl");
+			//SetEntityModel(victim, "models/player/t_guerilla.mdl");
 			return Plugin_Continue; // just let the damage get through
 		}
 		else if(GetConVarBool(g_hCVOpacityEnable))
@@ -840,6 +849,8 @@ public Action:Event_OnPlayerSpawn(Handle:event, const String:name[], bool:dontBr
 	// Huge thanks to GoD-Tony!
 	SetEntDataFloat(client, g_flFlashDuration, 10000.0, true);
 	SetEntDataFloat(client, g_flFlashMaxAlpha, 0.5, true);
+	
+	CreateTimer(0.5, Timer_SaveSpawnPosition, GetClientUserId(client), TIMER_FLAG_NO_MAPCHANGE);
 	
 	return Plugin_Continue;
 }
@@ -1657,6 +1668,16 @@ public Action:Timer_FlashEnd(Handle:timer, any:userid)
 	return Plugin_Stop;
 }
 
+public Action:Timer_SaveSpawnPosition(Handle:timer, any:userid)
+{
+	new client = GetClientOfUserId(userid);
+	if(!client)
+		return Plugin_Stop;
+	
+	GetClientAbsOrigin(client, g_fSpawnPosition[client]);
+	return Plugin_Stop;
+}
+
 /*
 * 
 * Console Command Handling
@@ -2445,6 +2466,25 @@ bool:IsConVarCheater(client)
 		}
 	}
 	return false;
+}
+
+bool:IsPlayerAFK(client)
+{
+	new Float:fOrigin[3];
+	GetClientAbsOrigin(client, fOrigin);
+	
+	// Did he move after spawn?
+	if(UTIL_VectorEqual(fOrigin, g_fSpawnPosition[client], 0.1))
+		return true;
+	return false;
+}
+
+stock bool:UTIL_VectorEqual(const Float:vec1[3], const Float:vec2[3], const Float:tolerance)
+{
+	for(new i=0;i<3;i++)
+		if(vec1[i] > (vec2[i] + tolerance) || vec1[i] < (vec2[i] - tolerance))
+			return false;
+	return true;
 }
 
 // Fade a players screen to black (amount=0) or removes the fade (amount=255)
