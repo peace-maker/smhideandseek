@@ -4,6 +4,7 @@
 #include <sdktools>
 #include <cstrike>
 #include <sdkhooks>
+#include <smlib>
 
 #define PLUGIN_VERSION "1.4.1"
 
@@ -312,6 +313,9 @@ public OnConfigsExecuted()
 		for(new i=0;i<sizeof(protected_cvars);i++)
 		{
 			g_hProtectedConvar[i] = FindConVar(protected_cvars[i]);
+			if(g_hProtectedConvar[i] == INVALID_HANDLE)
+				continue;
+			
 			previous_values[i] = GetConVarInt(g_hProtectedConvar[i]);
 			SetConVarInt(g_hProtectedConvar[i], forced_values[i], true);
 			HookConVarChange(g_hProtectedConvar[i], OnCvarChange);
@@ -1420,10 +1424,7 @@ public Action:ShowRoundTime(Handle:timer, any:roundTime)
 	{
 		if(IsClientInGame(i) && g_bInThirdPersonView[i])
 		{
-			new Handle:hBuffer = StartMessageOne("KeyHintText", i);
-			BfWriteByte(hBuffer, 1);
-			BfWriteString(hBuffer, timeLeft);
-			EndMessage();
+			Client_PrintKeyHintText(i, "%s", timeLeft);
 		}
 	}
 	
@@ -1734,10 +1735,7 @@ public Action:Toggle_ThirdPerson(client, args)
 	{
 		SetThirdPersonView(client, false);
 		// remove the roundtime message
-		new Handle:hBuffer = StartMessageOne("KeyHintText", client);
-		BfWriteByte(hBuffer, 1);
-		BfWriteString(hBuffer, "");
-		EndMessage();
+		Client_PrintKeyHintText(client, "");
 	}
 	
 	return Plugin_Handled;
@@ -1782,10 +1780,7 @@ public Action:Disable_ThirdPerson(client, args)
 	{
 		SetThirdPersonView(client, false);
 		// remove the roundtime message
-		new Handle:hBuffer = StartMessageOne("KeyHintText", client);
-		BfWriteByte(hBuffer, 1);
-		BfWriteString(hBuffer, "");
-		EndMessage();
+		Client_PrintKeyHintText(client, "");
 	}
 	
 	return Plugin_Handled;
@@ -2490,24 +2485,12 @@ stock bool:UTIL_VectorEqual(const Float:vec1[3], const Float:vec2[3], const Floa
 // Fade a players screen to black (amount=0) or removes the fade (amount=255)
 PerformBlind(client, amount)
 {	
-	new Handle:message = StartMessageOne("Fade", client);
-	BfWriteShort(message, 1536);
-	BfWriteShort(message, 1536);
-	
-	if (amount == 0)
-	{
-		BfWriteShort(message, 0x0010);
-	}
+	new mode;
+	if(amount == 0)
+		mode = FFADE_PURGE;
 	else
-	{
-		BfWriteShort(message, 0x0008);
-	}
-	
-	BfWriteByte(message, 0);
-	BfWriteByte(message, 0);
-	BfWriteByte(message, 0);
-	BfWriteByte(message, amount);
-	EndMessage();
+		mode = FFADE_STAYOUT;
+	Client_ScreenFade(client, 1536, mode, 1536, 0, 0, 0, amount);
 }
 
 // set a random model to a client
@@ -2777,6 +2760,8 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		for(new i=0;i<sizeof(protected_cvars);i++)
 		{
 			// reset old cvar values
+			if(g_hProtectedConvar[i] == INVALID_HANDLE)
+				continue;
 			UnhookConVarChange(g_hProtectedConvar[i], OnCvarChange);
 			SetConVarInt(g_hProtectedConvar[i], previous_values[i], true);
 		}
@@ -2869,6 +2854,8 @@ public Cfg_OnChangeEnable(Handle:convar, const String:oldValue[], const String:n
 		for(new i=0;i<sizeof(protected_cvars);i++)
 		{
 			g_hProtectedConvar[i] = FindConVar(protected_cvars[i]);
+			if(g_hProtectedConvar[i] == INVALID_HANDLE)
+				continue;
 			previous_values[i] = GetConVarInt(g_hProtectedConvar[i]);
 			SetConVarInt(g_hProtectedConvar[i], forced_values[i], true);
 			HookConVarChange(g_hProtectedConvar[i], OnCvarChange);
